@@ -238,7 +238,9 @@ class NCBIPathogenAdapter:
         df["host_target"] = [one_health[i % len(one_health)] for i in range(len(df))]
         return df
 
-    def _build_seed_dataset(self, n: int = 250) -> pd.DataFrame:
+    def _build_seed_dataset(self, n: int = 250, sample_size: Optional[int] = None) -> pd.DataFrame:
+        if sample_size is not None:
+            n = sample_size
         """
         Structured seed dataset representative of real NCBI Pathogen records.
         Gene/mechanism mappings derived from CARD ARO (card.mcmaster.ca).
