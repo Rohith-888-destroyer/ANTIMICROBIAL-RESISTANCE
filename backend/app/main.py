@@ -42,7 +42,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_db_initialized = False
+
+def ensure_db_ready():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            from backend.app.models.db_models import init_db, ObservationModel
+            init_db()
+            db = SessionLocal()
+            try:
+                if db.query(ObservationModel).count() == 0:
+                    logger.info("Database empty — running pipeline to seed initial records...")
+                    from scripts.run_pipeline import run_full_pipeline
+                    run_full_pipeline()
+            except Exception as exc:
+                logger.warning(f"Auto-seeding database failed: {exc}")
+            finally:
+                db.close()
+            _db_initialized = True
+        except Exception as exc:
+            logger.error(f"Database initialization failed: {exc}")
+
 def get_db():
+    ensure_db_ready()
     db = SessionLocal()
     try:
         yield db

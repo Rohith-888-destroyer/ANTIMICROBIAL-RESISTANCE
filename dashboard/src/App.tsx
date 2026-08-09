@@ -498,7 +498,7 @@ export const App: React.FC = () => {
                 ['HIGH',      'var(--green)',  '55–74 pts: Strong evidence, consistent across multiple observation periods.'],
                 ['MODERATE',  'var(--orange)', '35–54 pts: Partial evidence. Monitoring and additional sampling recommended.'],
                 ['LOW',       'var(--text-3)', '< 35 pts: Insufficient or sparse data. Treat as a surveillance gap signal.'],
-              ].map(([lv,col,desc])=>(
+              ].map(([lv,_col,desc])=>(
                 <div key={lv} style={{ display:'flex', gap:'.75rem', alignItems:'flex-start', padding:'.6rem .75rem', marginBottom:'.5rem', background:'var(--bg-2)', borderRadius:8, border:'1px solid var(--border)' }}>
                   <Badge lv={lv}/>
                   <span style={{ fontSize:'.78rem', color:'var(--text-2)', lineHeight:1.5 }}>{desc}</span>
