@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment secrets — DO NOT COMMIT
+.env
+*.env
+
+# Database files — contain live data, excluded from version control
+*.db
+*.sqlite
+*.sqlite3
+amr_sentinel.db
+
+# Logs
+*.log
+logs/
+
+# Node.js / Vite
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+
+# IDE
+.vscode/settings.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Data cache (auto-generated)
+data/cache/
+data/raw/*.csv
+data/raw/*.tsv
+data/raw/*.json
+
+# ML model artifacts (large files)
+models/*.pkl
+models/*.joblib
+models/*.h5
+models/*.pt
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Coverage
+htmlcov/
+.coverage
+coverage.xml
