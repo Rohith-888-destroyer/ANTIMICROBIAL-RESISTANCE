@@ -44,3 +44,25 @@ def test_evidence_scorer():
     )
     assert res["sentinel_score"] > 0
     assert res["evidence_level"] in ["LOW", "MODERATE", "HIGH", "VERY HIGH"]
+
+def test_api_v2_endpoints():
+    r_status = client.get("/api/data-status")
+    assert r_status.status_code == 200
+    assert "status" in r_status.json()
+
+    r_qual = client.get("/api/data-quality")
+    assert r_qual.status_code == 200
+    assert "completeness_score" in r_qual.json()
+
+    r_val = client.get("/api/model-validation")
+    assert r_val.status_code == 200
+    assert len(r_val.json()["metrics"]) > 0
+
+    r_lit = client.get("/api/literature")
+    assert r_lit.status_code == 200
+    assert isinstance(r_lit.json(), list)
+
+    r_search = client.post("/api/search", json={"query": "klebsiella"})
+    assert r_search.status_code == 200
+    assert "matching_signals_count" in r_search.json()
+

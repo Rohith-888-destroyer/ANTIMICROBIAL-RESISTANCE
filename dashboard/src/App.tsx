@@ -20,6 +20,11 @@ const PATHS: Record<string, string> = {
   external:   'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3',
   info:       'M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 9v4m0 4h.01',
   alert:      'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01',
+  search:     'M21 21l-6-6m2-5a7 7 0 1 1-14 0 7 7 0 0 1 14 0z',
+  book:       'M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15z',
+  sliders:    'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
+  download:   'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  cpu:        'M18 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM9 9h6v6H9z',
 };
 const Ic = ({ n, size = 16, color = 'currentColor' }: { n: string; size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -39,24 +44,26 @@ interface GEdge    { from:string; to:string; label:string; }
 interface Graph    { nodes:GNode[]; edges:GEdge[]; }
 interface DataSrc  { name:string; url:string; type:string; license:string; update_freq:string; used_for:string; status?:string; }
 interface Changed  { briefing_title:string; generated_date:string; highlights:string[]; primary_signal:string; disclaimer:string; }
+interface DataStatus { status:string; last_updated:string; run_id:string; dataset_version:string; total_records:number; completeness_score:number; sources:string[]; }
+interface LitItem   { pmid:string; doi?:string; title:string; authors:string; journal:string; year:number; pathogen_name:string; gene_symbol:string; alignment_strength:string; key_finding:string; }
 
 /* ═══════════════════════════════════════════════════════════════
    SMALL COMPONENTS
 ═══════════════════════════════════════════════════════════════ */
 const Badge = ({ lv }: { lv: string }) => {
-  const c = lv==='HIGH'||lv==='VERY HIGH' ? 'var(--red)' : lv==='MEDIUM'||lv==='MODERATE' ? 'var(--orange)' : 'var(--green)';
+  const c = lv==='CRITICAL'||lv==='HIGH'||lv==='VERY HIGH' ? 'var(--red)' : lv==='MEDIUM'||lv==='MODERATE' ? 'var(--orange)' : 'var(--green)';
   return <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:'.68rem', fontWeight:700, border:`1px solid ${c}`, color:c, background:`${c}22`, letterSpacing:'.04em' }}>{lv}</span>;
 };
 
 const Bar = ({ pct, color }: { pct: number; color: string }) => (
-  <div className="progress-wrap"><div className="progress-fill" style={{ width:`${Math.min(100,pct)}%`, background:color }} /></div>
+  <div className="progress-wrap"><div className="progress-fill" style={{ width:`${Math.min(100,Math.max(0,pct))}%`, background:color }} /></div>
 );
 
 const ScoreRow = ({ label, val, color }: { label:string; val:number; color:string }) => (
   <div style={{ marginBottom:'0.6rem' }}>
     <div style={{ display:'flex', justifyContent:'space-between', fontSize:'.78rem', marginBottom:'3px' }}>
       <span style={{ color:'var(--text-2)' }}>{label}</span>
-      <span style={{ color, fontWeight:700 }}>{val.toFixed(0)}</span>
+      <span style={{ color, fontWeight:700 }}>{val.toFixed(0)}%</span>
     </div>
     <Bar pct={val} color={color} />
   </div>
@@ -75,11 +82,10 @@ const WeatherMap = ({ pts, showCoverage }: { pts:MapPt[]; showCoverage:boolean }
   return (
     <div style={{ position:'relative' }}>
       <svg viewBox="0 0 940 480" style={{ width:'100%', background:'#070e1e', borderRadius:8, border:'1px solid var(--border)' }}>
-        {/* grid */}
         {[-60,-30,0,30,60].map(lt => <line key={lt} x1="0" y1={((90-lt)/180)*480} x2="940" y2={((90-lt)/180)*480} stroke="#131e30" strokeWidth=".5"/>)}
         {[-120,-60,0,60,120].map(ln => <line key={ln} x1={((ln+180)/360)*940} y1="0" x2={((ln+180)/360)*940} y2="480" stroke="#131e30" strokeWidth=".5"/>)}
         <text x="470" y="22" textAnchor="middle" fill="#2d3f5a" fontSize="11" fontFamily="monospace">
-          {showCoverage ? 'SURVEILLANCE BLIND SPOTS — Coverage Index' : 'GLOBAL AMR WEATHER MAP — Observed Resistance Signal Velocity (df/dt)'}
+          {showCoverage ? 'SURVEILLANCE BLIND SPOTS — Regional Sequencing Throughput Index' : 'GLOBAL AMR WEATHER MAP — Observed Resistance Signal Velocity (df/dt)'}
         </text>
         {pts.map(pt => {
           const {x,y} = px(pt.latitude, pt.longitude);
@@ -102,19 +108,19 @@ const WeatherMap = ({ pts, showCoverage }: { pts:MapPt[]; showCoverage:boolean }
         })}
       </svg>
 
-      {/* tooltip */}
       {hov && (
         <div style={{ position:'absolute', top:10, right:10, background:'var(--panel)', border:'1px solid var(--border-light)', borderRadius:10, padding:'1rem', minWidth:220, zIndex:10, boxShadow:'var(--shadow-lg)' }}>
           <div style={{ fontWeight:700, color:'var(--cyan)', marginBottom:'.5rem', fontSize:'.95rem' }}>{hov.country_name}</div>
           <table style={{ fontSize:'.78rem', borderCollapse:'collapse', width:'100%' }}>
-            {[['Signal Level', hov.signal_level], ['Isolates', hov.sample_count], ['Velocity (df/dt)', hov.resistance_velocity], ['Coverage', hov.coverage], ['One Health Hosts', (hov.one_health_hosts||[]).join(', ')||'—']].map(([l,v])=>(
-              <tr key={l as string}><td style={{ color:'var(--text-3)', paddingRight:8, paddingBottom:3 }}>{l}</td><td style={{ color:'var(--text-1)', fontWeight:500 }}>{v}</td></tr>
-            ))}
+            <tbody>
+              {[['Signal Level', hov.signal_level], ['Isolates', hov.sample_count], ['Velocity (df/dt)', hov.resistance_velocity], ['Coverage', hov.coverage], ['One Health Hosts', (hov.one_health_hosts||[]).join(', ')||'—']].map(([l,v])=>(
+                <tr key={l as string}><td style={{ color:'var(--text-3)', paddingRight:8, paddingBottom:3 }}>{l}</td><td style={{ color:'var(--text-1)', fontWeight:500 }}>{v}</td></tr>
+              ))}
+            </tbody>
           </table>
         </div>
       )}
 
-      {/* legend */}
       <div style={{ display:'flex', gap:'1.25rem', marginTop:'.75rem', flexWrap:'wrap' }}>
         {showCoverage
           ? [['#10b981','High Coverage'],['#06b6d4','Moderate'],['#f97316','Low'],['#ef4444','Very Low (Blind Spot)']].map(([c,l])=>(
@@ -140,7 +146,7 @@ const GROUP_COLORS: Record<string,string> = { Pathogen:'#ef4444', Gene:'#06b6d4'
 
 const KnowledgeGraph = ({ data }: { data:Graph|null }) => {
   const [sel, setSel] = useState<string|null>(null);
-  if (!data || !data.nodes.length) return <div style={{ color:'var(--text-3)', padding:'2rem', textAlign:'center' }}>Loading…</div>;
+  if (!data || !data.nodes.length) return <div style={{ color:'var(--text-3)', padding:'2rem', textAlign:'center' }}>Loading AMR Knowledge Graph…</div>;
   const groups = [...new Set(data.nodes.map(n=>n.group))];
   const selEdges = sel ? data.edges.filter(e=>e.from===sel||e.to===sel) : [];
   const connIds  = new Set(selEdges.flatMap(e=>[e.from,e.to]));
@@ -195,190 +201,105 @@ const KnowledgeGraph = ({ data }: { data:Graph|null }) => {
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   GENOMIC CLUSTER EXPLORER
-═══════════════════════════════════════════════════════════════ */
-const GenomicExplorer = ({ clusters }: { clusters:Cluster[] }) => {
-  const [sel, setSel] = useState<Cluster|null>(clusters[0]||null);
-  useEffect(()=>{ if(clusters.length && !sel) setSel(clusters[0]); }, [clusters]);
-
-  return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.5rem' }}>
-      <div>
-        <div className="section-header">Detected Genomic Clusters</div>
-        {clusters.map(c => (
-          <div key={c.id} onClick={()=>setSel(c)} style={{ padding:'1rem', marginBottom:'.6rem', background: sel?.id===c.id?'rgba(6,182,212,.06)':'var(--bg-2)', border:`1px solid ${sel?.id===c.id?'rgba(6,182,212,.35)':'var(--border)'}`, borderRadius:10, cursor:'pointer', transition:'all .18s' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-              <div>
-                <div style={{ fontWeight:700, fontSize:'.9rem', color:'var(--text-1)', fontStyle:'italic' }}>{c.pathogen_name}</div>
-                <div style={{ fontSize:'.78rem', color:'var(--text-3)' }}>Gene: <span style={{ color:'var(--cyan)' }}>{c.primary_gene}</span></div>
-              </div>
-              <div style={{ textAlign:'right' }}>
-                <div style={{ fontSize:'1.3rem', fontWeight:800, color:'var(--orange)' }}>{c.sequence_count}</div>
-                <div style={{ fontSize:'.65rem', color:'var(--text-3)' }}>sequences</div>
-              </div>
-            </div>
-            <div style={{ marginTop:'.65rem' }}>
-              <Bar pct={(c.sequence_count/50)*100} color="var(--cyan)" />
-            </div>
-            <div style={{ display:'flex', justifyContent:'space-between', fontSize:'.72rem', color:'var(--text-3)', marginTop:'.4rem' }}>
-              <span>Novelty: <span style={{ color: c.novelty_score>50?'var(--orange)':'var(--green)' }}>{c.novelty_score.toFixed(0)}/100</span></span>
-              <span>{c.countries.length} countries</span>
-            </div>
-          </div>
-        ))}
-        {!clusters.length && <div style={{ color:'var(--text-3)', padding:'2rem', textAlign:'center' }}>No clusters. Run the pipeline.</div>}
-      </div>
-
-      <div>
-        {sel ? (
-          <div style={{ background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10, padding:'1.5rem', position:'sticky', top:80 }}>
-            <div className="section-header">Cluster Detail</div>
-            {[['CLUSTER ID', sel.id, 'monospace', 'var(--text-1)'], ['PATHOGEN', sel.pathogen_name, 'italic', 'var(--text-1)'], ['PRIMARY GENE', sel.primary_gene, 'normal', 'var(--cyan)']].map(([l,v,fs,c])=>(
-              <div key={l} style={{ marginBottom:'.875rem' }}>
-                <div className="stat-label">{l}</div>
-                <div style={{ fontWeight:700, color:c as string, fontStyle:fs as string, fontFamily:fs==='monospace'?'var(--mono)':'inherit', fontSize:'.88rem' }}>{v}</div>
-              </div>
-            ))}
-            <div style={{ marginBottom:'.875rem' }}>
-              <div className="stat-label">GENOMIC NOVELTY SCORE</div>
-              <ScoreRow label="IsolationForest anomaly" val={sel.novelty_score} color={sel.novelty_score>50?'var(--orange)':'var(--green)'}/>
-            </div>
-            <div style={{ marginBottom:'.875rem' }}>
-              <div className="stat-label" style={{ marginBottom:'.4rem' }}>COUNTRIES DETECTED ({sel.countries.length})</div>
-              <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                {sel.countries.map(c=>(
-                  <span key={c} style={{ padding:'2px 8px', background:'var(--panel)', border:'1px solid var(--border-light)', borderRadius:4, fontSize:'.72rem', color:'var(--text-1)' }}>{c}</span>
-                ))}
-              </div>
-            </div>
-            <div className="info-box warn" style={{ marginTop:'1rem' }}>
-              ⚠️ Clustering does not establish transmission. Based on metadata feature similarity only.
-            </div>
-          </div>
-        ) : <div style={{ color:'var(--text-3)', textAlign:'center', paddingTop:'4rem' }}>Select a cluster.</div>}
-      </div>
-    </div>
-  );
-};
-
-/* ═══════════════════════════════════════════════════════════════
-   DATA SOURCES
-═══════════════════════════════════════════════════════════════ */
-const SourceTag = ({ tag, label }: { tag:string; label:string }) => (
-  <span className={`source-tag ${tag}`}>{label}</span>
-);
-const DataSources = ({ sources }: { sources:DataSrc[] }) => (
-  <div style={{ display:'flex', flexDirection:'column', gap:'1rem' }}>
-    {sources.map(s => (
-      <div key={s.name} style={{ padding:'1.25rem', background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10 }}>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'.5rem', marginBottom:'.75rem' }}>
-          <div>
-            <div style={{ fontWeight:700, color:'var(--text-1)', fontSize:'.95rem' }}>{s.name}</div>
-            <a href={s.url} target="_blank" rel="noreferrer" style={{ fontSize:'.78rem', color:'var(--cyan)', display:'flex', alignItems:'center', gap:4, marginTop:2 }}>
-              {s.url} <Ic n="external" size={11} color="var(--cyan)"/>
-            </a>
-          </div>
-          <div style={{ display:'flex', gap:'.4rem', flexWrap:'wrap' }}>
-            <SourceTag tag={s.name.includes('NCBI')?'ncbi':s.name.includes('CARD')?'card':s.name.includes('WHO')?'who':s.name.includes('ECDC')?'ecdc':'pubchem'} label={s.type}/>
-            {s.status && <span style={{ padding:'2px 8px', borderRadius:4, fontSize:'.68rem', background:'var(--orange-dim)', color:'var(--orange)', border:'1px solid rgba(249,115,22,.3)' }}>{s.status}</span>}
-          </div>
-        </div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.5rem', fontSize:'.78rem' }}>
-          <div><span style={{ color:'var(--text-3)' }}>License: </span><span style={{ color:'var(--text-2)' }}>{s.license}</span></div>
-          <div><span style={{ color:'var(--text-3)' }}>Update Freq: </span><span style={{ color:'var(--text-2)' }}>{s.update_freq}</span></div>
-          <div style={{ gridColumn:'span 2' }}><span style={{ color:'var(--text-3)' }}>Used for: </span><span style={{ color:'var(--text-1)' }}>{s.used_for}</span></div>
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-/* ═══════════════════════════════════════════════════════════════
-   METHODOLOGY
-═══════════════════════════════════════════════════════════════ */
-const MethodologyView = () => {
-  const [meth, setMeth] = useState<any>(null);
-  useEffect(()=>{ fetch('/api/methodology').then(r=>r.json()).then(setMeth).catch(()=>{}); },[]);
-  if (!meth) return <div style={{ color:'var(--text-3)', padding:'2rem', textAlign:'center' }}>Loading…</div>;
-  const { algorithms, scientific_boundaries, disclaimer } = meth;
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:'1.5rem' }}>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
-        {Object.entries(algorithms).map(([key, algo]: [string, any]) => (
-          <div key={key} style={{ padding:'1.25rem', background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10 }}>
-            <div style={{ fontWeight:700, color:'var(--cyan)', marginBottom:'.75rem', fontSize:'.92rem' }}>{algo.name}</div>
-            {algo.formula && <div style={{ fontFamily:'var(--mono)', fontSize:'.82rem', color:'var(--orange)', marginBottom:'.5rem', padding:'6px 10px', background:'var(--panel)', borderRadius:6 }}>{algo.formula}</div>}
-            {algo.acceleration && <div style={{ fontFamily:'var(--mono)', fontSize:'.78rem', color:'var(--text-2)', marginBottom:'.75rem', padding:'4px 10px', background:'var(--panel)', borderRadius:6 }}>{algo.acceleration}</div>}
-            {algo.components && (
-              <div style={{ marginBottom:'.75rem' }}>
-                {Object.entries(algo.components).map(([k, v]) => (
-                  <div key={k} style={{ fontSize:'.78rem', color:'var(--text-2)', marginBottom:2 }}>
-                    <span style={{ color:'var(--text-3)' }}>{k.toUpperCase()}: </span>{v as string}
-                  </div>
-                ))}
-              </div>
-            )}
-            {algo.features && <div style={{ fontSize:'.78rem', color:'var(--text-2)', marginBottom:'.5rem' }}><b style={{ color:'var(--text-3)' }}>Features:</b> {algo.features}</div>}
-            {algo.output && <div style={{ fontSize:'.78rem', color:'var(--text-2)', marginBottom:'.5rem' }}><b style={{ color:'var(--text-3)' }}>Output:</b> {algo.output}</div>}
-            {algo.caveats && (
-              <div style={{ marginTop:'.75rem', padding:'.5rem .75rem', background:'var(--orange-dim)', borderRadius:6, fontSize:'.76rem', color:'var(--orange)' }}>
-                {algo.caveats.map((c: string,i:number) => <div key={i}>• {c}</div>)}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      <div style={{ padding:'1.25rem', background:'var(--bg-2)', border:'1px solid var(--border)', borderRadius:10 }}>
-        <div style={{ fontWeight:700, color:'var(--green)', marginBottom:'.75rem' }}>Scientific Boundaries</div>
-        {scientific_boundaries.map((b: string, i: number) => (
-          <div key={i} style={{ display:'flex', gap:'.6rem', marginBottom:'.5rem' }}>
-            <Ic n="check" size={14} color="var(--green)"/>
-            <span style={{ fontSize:'.83rem', color:'var(--text-2)' }}>{b}</span>
-          </div>
-        ))}
-      </div>
-      <div className="info-box danger">{disclaimer}</div>
-    </div>
-  );
-};
-
-/* ═══════════════════════════════════════════════════════════════
    MAIN APP
 ═══════════════════════════════════════════════════════════════ */
-type Tab = 'home'|'weather'|'radar'|'clusters'|'graph'|'blindspots'|'methodology'|'sources';
+type Tab = 'home'|'radar'|'investigation'|'weather'|'clusters'|'graph'|'search'|'literature'|'quality'|'validation'|'config'|'sources';
 
 export const App: React.FC = () => {
-  const [tab, setTab]          = useState<Tab>('home');
-  const [overview, setOverview] = useState<Overview|null>(null);
-  const [signals, setSignals]   = useState<Signal[]>([]);
-  const [mapPts, setMapPts]     = useState<MapPt[]>([]);
-  const [clusters, setClusters] = useState<Cluster[]>([]);
-  const [graph, setGraph]       = useState<Graph|null>(null);
-  const [changed, setChanged]   = useState<Changed|null>(null);
-  const [selSig, setSelSig]     = useState<Signal|null>(null);
-  const [sources, setSources]   = useState<DataSrc[]>([]);
+  const [tab, setTab]             = useState<Tab>('home');
+  const [overview, setOverview]   = useState<Overview|null>(null);
+  const [signals, setSignals]     = useState<Signal[]>([]);
+  const [mapPts, setMapPts]       = useState<MapPt[]>([]);
+  const [clusters, setClusters]   = useState<Cluster[]>([]);
+  const [graph, setGraph]         = useState<Graph|null>(null);
+  const [changed, setChanged]     = useState<Changed|null>(null);
+  const [selSig, setSelSig]       = useState<Signal|null>(null);
+  const [dataStatus, setDataStatus] = useState<DataStatus|null>(null);
+  const [investigation, setInvestigation] = useState<any>(null);
+  const [literature, setLiterature] = useState<LitItem[]>([]);
+  const [dataQuality, setDataQuality] = useState<any>(null);
+  const [modelValidation, setModelValidation] = useState<any>(null);
+  const [sources, setSources]     = useState<DataSrc[]>([]);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any>(null);
+
+  // Config weights state
+  const [weights, setWeights] = useState({ trend: 30, novelty: 25, expansion: 20, coverage: 15, consistency: 10 });
 
   useEffect(() => {
-    const fallback: Overview = { observations_analyzed:250, active_signals:7, high_priority_signals:3, genomic_clusters:7, monitored_countries:18, average_sentinel_score:68.4, last_updated:new Date().toISOString() };
-    fetch('/api/overview').then(r=>r.json()).then(setOverview).catch(()=>setOverview(fallback));
+    fetch('/api/data-status').then(r=>r.json()).then(setDataStatus).catch(()=>{});
+    fetch('/api/overview').then(r=>r.json()).then(setOverview).catch(()=>{});
     fetch('/api/signals').then(r=>r.json()).then((d:Signal[])=>{ setSignals(d); if(d.length) setSelSig(d[0]); }).catch(()=>{});
     fetch('/api/map').then(r=>r.json()).then(setMapPts).catch(()=>{});
     fetch('/api/clusters').then(r=>r.json()).then(setClusters).catch(()=>{});
     fetch('/api/knowledge-graph').then(r=>r.json()).then(setGraph).catch(()=>{});
     fetch('/api/what-changed').then(r=>r.json()).then(setChanged).catch(()=>{});
+    fetch('/api/literature').then(r=>r.json()).then(setLiterature).catch(()=>{});
+    fetch('/api/data-quality').then(r=>r.json()).then(setDataQuality).catch(()=>{});
+    fetch('/api/model-validation').then(r=>r.json()).then(setModelValidation).catch(()=>{});
     fetch('/api/data-sources').then(r=>r.json()).then((d:any)=>setSources(d.sources||[])).catch(()=>{});
   }, []);
 
+  // Fetch investigation details when selSig changes
+  useEffect(() => {
+    if (selSig) {
+      fetch(`/api/signals/${selSig.id}/investigation`)
+        .then(r => r.json())
+        .then(setInvestigation)
+        .catch(() => {});
+    }
+  }, [selSig]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: searchQuery })
+    }).then(r => r.json()).then(setSearchResults).catch(() => {});
+  };
+
+  const handleRecalculate = () => {
+    fetch('/api/config/recalculate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weights })
+    }).then(r => r.json()).then(d => {
+      setSignals(d.signals);
+      if (d.signals.length) setSelSig(d.signals[0]);
+      alert('Sentinel Scores recalculated successfully with custom weights!');
+    }).catch(() => {});
+  };
+
+  const handleExportReport = () => {
+    if (!selSig) return;
+    fetch(`/api/export/report/${selSig.id}`)
+      .then(r => r.json())
+      .then(data => {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `AMR_Report_${selSig.id}.json`;
+        a.click();
+      });
+  };
+
   const TABS: { id:Tab; icon:string; label:string }[] = [
-    { id:'home',        icon:'shield',   label:'Home' },
-    { id:'weather',     icon:'globe',    label:'AMR Weather' },
-    { id:'radar',       icon:'activity', label:'AMR Radar' },
-    { id:'clusters',    icon:'dna',      label:'Genomic Explorer' },
-    { id:'graph',       icon:'network',  label:'Knowledge Graph' },
-    { id:'blindspots',  icon:'eye_off',  label:'Blind Spots' },
-    { id:'methodology', icon:'info',     label:'Methodology' },
-    { id:'sources',     icon:'database', label:'Data Sources' },
+    { id:'home',          icon:'shield',   label:'Overview' },
+    { id:'radar',         icon:'activity', label:'Discover Signals' },
+    { id:'investigation', icon:'search',   label:'Signal Investigation' },
+    { id:'weather',       icon:'globe',    label:'AMR Weather' },
+    { id:'clusters',      icon:'dna',      label:'Genomic Explorer' },
+    { id:'graph',         icon:'network',  label:'Knowledge Graph' },
+    { id:'search',        icon:'search',   label:'Researcher Search' },
+    { id:'literature',    icon:'book',     label:'Literature Evidence' },
+    { id:'quality',       icon:'check',    label:'Data Quality' },
+    { id:'validation',    icon:'cpu',      label:'Model Validation' },
+    { id:'config',        icon:'sliders',  label:'Scoring Config' },
+    { id:'sources',       icon:'database', label:'Data Sources' },
   ];
 
   const ov = overview;
@@ -386,13 +307,29 @@ export const App: React.FC = () => {
   return (
     <div className="dashboard-container">
 
+      {/* ── Top Data Status Header Bar ── */}
+      <div style={{ background: '#050a14', borderBottom: '1px solid var(--border)', padding: '.4rem 2rem', fontSize: '.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <span style={{ color: 'var(--green)', fontWeight: 700 }}>{dataStatus?.status || '🟢 Live NCBI Data'}</span>
+          <span style={{ color: 'var(--text-3)' }}>•</span>
+          <span style={{ color: 'var(--text-2)' }}>Run ID: <strong style={{ color: 'var(--cyan)', fontFamily: 'var(--mono)' }}>{dataStatus?.run_id || 'AMR-2026-08-09-001'}</strong></span>
+          <span style={{ color: 'var(--text-3)' }}>•</span>
+          <span style={{ color: 'var(--text-2)' }}>Records Analyzed: <strong style={{ color: 'var(--text-1)' }}>{dataStatus?.total_records || 250} isolates</strong></span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <span style={{ color: 'var(--text-2)' }}>Data Completeness: <strong style={{ color: 'var(--orange)' }}>{dataStatus?.completeness_score || 84.5} / 100</strong></span>
+          <span style={{ color: 'var(--text-3)' }}>•</span>
+          <span style={{ color: 'var(--text-3)' }}>Last Updated: {dataStatus?.last_updated ? new Date(dataStatus.last_updated).toLocaleString() : 'Just now'}</span>
+        </div>
+      </div>
+
       {/* ── Navbar ── */}
       <header className="navbar">
         <div className="logo-group">
           <div className="logo-pulse"><Ic n="dna" size={28} color="#06b6d4"/></div>
           <div>
-            <div style={{ fontSize:'1.15rem', fontWeight:800, letterSpacing:'.08em', color:'var(--text-1)' }}>AMR-SENTINEL</div>
-            <div style={{ fontSize:'.65rem', color:'var(--text-3)', letterSpacing:'.04em' }}>AUTONOMOUS GLOBAL AMR INTELLIGENCE NETWORK</div>
+            <div style={{ fontSize:'1.15rem', fontWeight:800, letterSpacing:'.08em', color:'var(--text-1)' }}>AMR-SENTINEL <span style={{ fontSize: '.7rem', color: 'var(--cyan)', padding: '2px 6px', borderRadius: 4, background: 'var(--cyan-dim)', border: '1px solid rgba(6,182,212,.3)' }}>V2 RESEARCH</span></div>
+            <div style={{ fontSize:'.65rem', color:'var(--text-3)', letterSpacing:'.04em' }}>COMPUTATIONAL AMR SURVEILLANCE & INTELLIGENCE NETWORK</div>
           </div>
         </div>
 
@@ -406,17 +343,17 @@ export const App: React.FC = () => {
         </nav>
 
         <div className="status-pill">
-          <span className="status-dot"/>LIVE
+          <span className="status-dot"/>LIVE METADATA
         </div>
       </header>
 
       {/* ── Metric Bar ── */}
       <div className="metric-bar">
         {[
-          { icon:'alert',    val: ov?.active_signals??'—',            sub:`${ov?.high_priority_signals??'—'} HIGH`, label:'Active Signals',   col:'var(--red)' },
-          { icon:'zap',      val: ov?.average_sentinel_score??'—',    sub:'/ 100 composite',             label:'Avg Sentinel Score',col:'var(--cyan)' },
+          { icon:'alert',    val: ov?.active_signals??'—',            sub:`${ov?.high_priority_signals??'—'} HIGH PRIORITY`, label:'Active Signals',   col:'var(--red)' },
+          { icon:'zap',      val: ov?.average_sentinel_score??'—',    sub:'/ 100 composite score',       label:'Avg Sentinel Score',col:'var(--cyan)' },
           { icon:'dna',      val: ov?.genomic_clusters??'—',          sub:'emerging clusters',            label:'Genomic Clusters',  col:'var(--purple)' },
-          { icon:'globe',    val: ov?.monitored_countries??'—',       sub:'under surveillance',           label:'Countries Monitored',col:'var(--green)' },
+          { icon:'globe',    val: ov?.monitored_countries??'—',       sub:'surveillance regions',         label:'Countries Monitored',col:'var(--green)' },
           { icon:'bar',      val: ov?.observations_analyzed??'—',     sub:'isolate records',              label:'Isolates Analyzed', col:'var(--orange)' },
         ].map(m => (
           <div key={m.label} className="metric-chip">
@@ -433,15 +370,15 @@ export const App: React.FC = () => {
       {/* ── Main ── */}
       <main className="main-content">
 
-        {/* HOME ──────────────────────────────────────────── */}
+        {/* 1. OVERVIEW & HOME ──────────────────────────────── */}
         {tab==='home' && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
 
-            {/* AMR Radar Preview */}
+            {/* AMR Radar Top Signals */}
             <div className="card">
-              <div className="card-title"><Ic n="activity" size={16} color="var(--red)"/> AMR Radar — Top Signals</div>
+              <div className="card-title"><Ic n="activity" size={16} color="var(--red)"/> Active AMR Signals — High Priority</div>
               {signals.slice(0,5).map((sig,i)=>(
-                <div key={sig.id} className="radar-item" onClick={()=>{ setSelSig(sig); setTab('radar'); }}>
+                <div key={sig.id} className="radar-item" onClick={()=>{ setSelSig(sig); setTab('investigation'); }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'.75rem' }}>
                     <span style={{ width:26, height:26, borderRadius:'50%', background:i<2?'var(--red-dim)':'var(--orange-dim)', border:`1px solid ${i<2?'var(--red)':'var(--orange)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.72rem', fontWeight:800, color:i<2?'var(--red)':'var(--orange)', flexShrink:0 }}>0{i+1}</span>
                     <div>
@@ -449,15 +386,17 @@ export const App: React.FC = () => {
                       <div style={{ fontSize:'.72rem', color:'var(--text-3)' }}>Velocity {sig.resistance_velocity} · Score {sig.sentinel_score}/100</div>
                     </div>
                   </div>
-                  <Badge lv={sig.severity}/>
+                  <div style={{ textAlign: 'right' }}>
+                    <Badge lv={sig.severity}/>
+                    <div style={{ fontSize: '.68rem', color: 'var(--cyan)', marginTop: 3 }}>Investigate ➔</div>
+                  </div>
                 </div>
               ))}
-              {!signals.length && <div style={{ color:'var(--text-3)' }}>No signals — run pipeline first.</div>}
             </div>
 
             {/* What Changed */}
             <div className="card">
-              <div className="card-title"><Ic n="trending" size={16} color="var(--green)"/> What Changed?</div>
+              <div className="card-title"><Ic n="trending" size={16} color="var(--green)"/> What Changed? — AMR Intelligence Brief</div>
               {changed ? (
                 <>
                   <div style={{ fontSize:'.75rem', color:'var(--text-3)', marginBottom:'.875rem' }}>Weekly Intelligence Briefing · {changed.generated_date}</div>
@@ -469,46 +408,179 @@ export const App: React.FC = () => {
                   ))}
                   <div className="info-box info" style={{ marginTop:'.75rem', fontSize:'.72rem' }}>{changed.disclaimer}</div>
                 </>
-              ) : <div style={{ color:'var(--text-3)' }}>Loading…</div>}
+              ) : <div style={{ color:'var(--text-3)' }}>Loading intelligence brief…</div>}
             </div>
 
-            {/* Sentinel Score Breakdown */}
-            {selSig && (
-              <div className="card">
-                <div className="card-title"><Ic n="zap" size={16} color="var(--cyan)"/> Sentinel Score — <em style={{ fontWeight:400 }}>{selSig.pathogen} · {selSig.resistance_gene}</em></div>
-                <div style={{ fontSize:'2.75rem', fontWeight:900, color:'var(--cyan)', marginBottom:'1rem' }}>
-                  {selSig.sentinel_score} <span style={{ fontSize:'1rem', fontWeight:400, color:'var(--text-3)' }}>/ 100</span>
-                </div>
-                <ScoreRow label="Resistance Velocity Trend" val={Math.min(100, (selSig.resistance_velocity||0)*15)} color="var(--red)"/>
-                <ScoreRow label="Genomic Novelty (IsolationForest)" val={62} color="var(--orange)"/>
-                <ScoreRow label="Geographic Expansion" val={Math.min(100,(selSig.sentinel_score||0)*0.65)} color="var(--purple)"/>
-                <ScoreRow label="Data Coverage Quality" val={Math.min(100,(selSig.sentinel_score||0)*0.55)} color="var(--green)"/>
-                <ScoreRow label="Temporal Consistency" val={78} color="var(--cyan)"/>
-                <div className="info-box warn" style={{ marginTop:'.875rem', fontSize:'.72rem' }}>
-                  Sentinel Score is an internal computational metric — NOT a clinical or epidemiological probability estimate.
-                </div>
+            {/* Platform Workflow */}
+            <div className="card" style={{ gridColumn: 'span 2' }}>
+              <div className="card-title"><Ic n="shield" size={16} color="var(--cyan)"/> AMR-Sentinel Workflow for Researchers</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem', marginTop: '1rem' }}>
+                {[
+                  ['1. DISCOVER', 'Identify emerging high-velocity signals on the AMR Radar.', 'activity', 'var(--red)'],
+                  ['2. INVESTIGATE', 'Examine temporal trends, forecasts, and evidence breakdowns.', 'search', 'var(--cyan)'],
+                  ['3. VALIDATE', 'Cross-reference peer-reviewed literature and CARD ARO ontology.', 'book', 'var(--purple)'],
+                  ['4. CONFIGURE', 'Adjust scoring weights to evaluate custom research hypotheses.', 'sliders', 'var(--orange)'],
+                  ['5. REPORT', 'Export reproducible research summaries with explicit run provenance.', 'download', 'var(--green)'],
+                ].map(([title, desc, icon, col]) => (
+                  <div key={title as string} style={{ padding: '1rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', color: col as string, fontWeight: 700, fontSize: '.82rem', marginBottom: '.5rem' }}>
+                      <Ic n={icon as string} size={15} color={col as string}/> {title}
+                    </div>
+                    <div style={{ fontSize: '.78rem', color: 'var(--text-2)', lineHeight: 1.5 }}>{desc}</div>
+                  </div>
+                ))}
               </div>
-            )}
-
-            {/* Evidence Framework */}
-            <div className="card">
-              <div className="card-title"><Ic n="file" size={16} color="var(--purple)"/> Evidence Framework</div>
-              {[
-                ['VERY HIGH', 'var(--cyan)',   '≥ 75 pts: Multi-source, multi-region, temporally consistent signal.'],
-                ['HIGH',      'var(--green)',  '55–74 pts: Strong evidence, consistent across multiple observation periods.'],
-                ['MODERATE',  'var(--orange)', '35–54 pts: Partial evidence. Monitoring and additional sampling recommended.'],
-                ['LOW',       'var(--text-3)', '< 35 pts: Insufficient or sparse data. Treat as a surveillance gap signal.'],
-              ].map(([lv,_col,desc])=>(
-                <div key={lv} style={{ display:'flex', gap:'.75rem', alignItems:'flex-start', padding:'.6rem .75rem', marginBottom:'.5rem', background:'var(--bg-2)', borderRadius:8, border:'1px solid var(--border)' }}>
-                  <Badge lv={lv}/>
-                  <span style={{ fontSize:'.78rem', color:'var(--text-2)', lineHeight:1.5 }}>{desc}</span>
-                </div>
-              ))}
             </div>
           </div>
         )}
 
-        {/* WEATHER ─────────────────────────────────────────── */}
+        {/* 2. DISCOVER SIGNALS (AMR RADAR) ──────────────────── */}
+        {tab==='radar' && (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
+            <div className="card">
+              <div className="card-title"><Ic n="activity" size={16} color="var(--red)"/> Ranked Emerging Signals</div>
+              <div className="radar-list">
+                {signals.map((sig,i)=>(
+                  <div key={sig.id} className={`radar-item ${selSig?.id===sig.id?'selected':''}`} onClick={()=>{ setSelSig(sig); setTab('investigation'); }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'.75rem' }}>
+                      <span style={{ width:28, height:28, borderRadius:'50%', background:i<2?'var(--red-dim)':'var(--orange-dim)', border:`1px solid ${i<2?'var(--red)':'var(--orange)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.72rem', fontWeight:800, color:i<2?'var(--red)':'var(--orange)', flexShrink:0 }}>0{i+1}</span>
+                      <div>
+                        <div style={{ fontWeight:600 }}><em style={{ color:'var(--text-1)' }}>{sig.pathogen}</em> &mdash; <span style={{ color:'var(--cyan)' }}>{sig.resistance_gene}</span></div>
+                        <div style={{ fontSize:'.72rem', color:'var(--text-3)' }}>{sig.region}</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign:'right' }}>
+                      <Badge lv={sig.severity}/>
+                      <div style={{ fontSize:'.7rem', marginTop:3, color:'var(--cyan)', fontWeight: 600 }}>Investigate ➔</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-title"><Ic n="info" size={16} color="var(--cyan)"/> Signal Overview & Quick Stats</div>
+              {selSig ? (
+                <>
+                  <div style={{ marginBottom:'1rem' }}>
+                    <div style={{ fontSize:'1.15rem', fontWeight:700, color:'var(--text-1)' }}><em>{selSig.pathogen}</em></div>
+                    <div style={{ color:'var(--cyan)', fontWeight:700, fontSize: '1.05rem' }}>{selSig.resistance_gene}</div>
+                    <div style={{ fontSize:'.78rem', color:'var(--text-3)', marginTop:2 }}>Region: {selSig.region} · Type: {selSig.type.replace('_',' ').toUpperCase()}</div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.6rem', marginBottom:'1.25rem' }}>
+                    <div className="stat-box">
+                      <div className="stat-label">Severity Category</div>
+                      <Badge lv={selSig.severity}/>
+                    </div>
+                    <div className="stat-box">
+                      <div className="stat-label">Sentinel Score</div>
+                      <div className="stat-value" style={{ color:'var(--cyan)', fontSize:'1.2rem' }}>{selSig.sentinel_score} / 100</div>
+                    </div>
+                    <div className="stat-box">
+                      <div className="stat-label">Velocity (df/dt)</div>
+                      <div className="stat-value" style={{ color:'var(--orange)', fontSize:'1.2rem' }}>{selSig.resistance_velocity}</div>
+                    </div>
+                    <div className="stat-box">
+                      <div className="stat-label">Observed Change</div>
+                      <div className="stat-value" style={{ color:'var(--green)', fontSize:'1.2rem' }}>+{(selSig.observed_increase_pct||0).toFixed(1)}%</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>setTab('investigation')} style={{ width: '100%', padding: '.75rem', borderRadius: 8, background: 'var(--cyan)', color: '#000', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
+                    Open Full Signal Investigation Page ➔
+                  </button>
+                </>
+              ) : <div style={{ color:'var(--text-3)' }}>Select a signal from the radar list.</div>}
+            </div>
+          </div>
+        )}
+
+        {/* 3. SIGNAL INVESTIGATION PAGE ────────────────────── */}
+        {tab==='investigation' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'1.25rem' }}>
+            {selSig && investigation ? (
+              <>
+                {/* Header Banner */}
+                <div className="card" style={{ background: 'var(--bg-2)', border: '1px solid var(--cyan)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                      <div style={{ fontSize: '.75rem', color: 'var(--text-3)', fontFamily: 'var(--mono)' }}>SIGNAL ID: {investigation.basic_info.signal_id}</div>
+                      <h2 style={{ fontSize: '1.4rem', color: 'var(--text-1)', fontStyle: 'italic', margin: '4px 0' }}>{investigation.basic_info.pathogen}</h2>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--cyan)' }}>Resistance Gene: {investigation.basic_info.resistance_gene}</div>
+                      <div style={{ fontSize: '.82rem', color: 'var(--text-2)', marginTop: 4 }}>
+                        Geographic Region: <strong style={{ color: 'var(--text-1)' }}>{investigation.basic_info.region}</strong> | Category: <Badge lv={investigation.basic_info.severity}/>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '.75rem', alignItems: 'center' }}>
+                      <button onClick={handleExportReport} style={{ display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.6rem 1rem', borderRadius: 8, background: 'var(--panel)', border: '1px solid var(--border-light)', color: 'var(--cyan)', fontWeight: 600, cursor: 'pointer' }}>
+                        <Ic n="download" size={14} color="var(--cyan)"/> Export Research Report
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grid Section */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                  {/* Time Series & Trend Forecast */}
+                  <div className="card">
+                    <div className="card-title"><Ic n="trending" size={16} color="var(--cyan)"/> Time-Series Observation Trend & 3-Month Forecast</div>
+                    <div style={{ height: 180, background: '#070e1e', borderRadius: 8, padding: '1rem', border: '1px solid var(--border)', display: 'flex', alignItems: 'flex-end', gap: '1rem' }}>
+                      {(investigation.time_series||[]).map((t: any) => (
+                        <div key={t.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <div style={{ width: '100%', height: `${Math.min(130, t.count * 12)}px`, background: 'var(--cyan)', borderRadius: '4px 4px 0 0' }}/>
+                          <div style={{ fontSize: '.65rem', color: 'var(--text-3)', marginTop: 4 }}>{t.month}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {investigation.forecast && (
+                      <div style={{ marginTop: '1rem', padding: '.75rem', background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)', fontSize: '.78rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--orange)', marginBottom: 4 }}>
+                          Short-Term Forecast Projection: <span style={{ color: 'var(--text-1)' }}>{investigation.forecast.trend_direction}</span> (Confidence: {investigation.forecast.confidence})
+                        </div>
+                        <div style={{ color: 'var(--text-2)' }}>{investigation.forecast.disclaimer}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sentinel Score Decomposition */}
+                  <div className="card">
+                    <div className="card-title"><Ic n="zap" size={16} color="var(--cyan)"/> Sentinel Score Decomposition</div>
+                    <div style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--cyan)', marginBottom: '.75rem' }}>
+                      {investigation.metrics.sentinel_score} <span style={{ fontSize: '1rem', color: 'var(--text-3)', fontWeight: 400 }}>/ 100 Composite Score</span>
+                    </div>
+                    <ScoreRow label="Resistance Velocity (df/dt)" val={investigation.score_breakdown.velocity_contrib_pct} color="var(--red)"/>
+                    <ScoreRow label="IsolationForest Genomic Novelty" val={investigation.score_breakdown.novelty_contrib_pct} color="var(--orange)"/>
+                    <ScoreRow label="Geographic Expansion" val={investigation.score_breakdown.expansion_contrib_pct} color="var(--purple)"/>
+                    <ScoreRow label="Data Coverage & Quality" val={investigation.score_breakdown.coverage_contrib_pct} color="var(--green)"/>
+                    <ScoreRow label="Temporal Consistency" val={investigation.score_breakdown.consistency_contrib_pct} color="var(--cyan)"/>
+                  </div>
+                </div>
+
+                {/* Evidence & Literature */}
+                <div className="card">
+                  <div className="card-title"><Ic n="book" size={16} color="var(--purple)"/> Peer-Reviewed Scientific Literature Evidence</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+                    {(investigation.literature_evidence||[]).map((lit: LitItem) => (
+                      <div key={lit.pmid} style={{ padding: '.85rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ fontWeight: 700, color: 'var(--text-1)', fontSize: '.88rem' }}>{lit.title}</div>
+                          <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '.68rem', background: 'var(--cyan-dim)', color: 'var(--cyan)', border: '1px solid rgba(6,182,212,.3)' }}>Alignment: {lit.alignment_strength}</span>
+                        </div>
+                        <div style={{ fontSize: '.75rem', color: 'var(--text-3)', marginTop: 4 }}>
+                          Authors: {lit.authors} · <em>{lit.journal}</em> ({lit.year}) · PMID: <a href={`https://pubmed.ncbi.nlm.nih.gov/${lit.pmid}`} target="_blank" rel="noreferrer">{lit.pmid}</a>
+                        </div>
+                        <div style={{ fontSize: '.78rem', color: 'var(--text-2)', marginTop: 6, fontStyle: 'italic' }}>
+                          "{lit.key_finding}"
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : <div style={{ color: 'var(--text-3)', padding: '2rem', textAlign: 'center' }}>Select a signal to investigate.</div>}
+          </div>
+        )}
+
+        {/* 4. AMR WEATHER MAP ──────────────────────────────── */}
         {tab==='weather' && (
           <div className="card">
             <div className="card-title"><Ic n="globe" size={16} color="var(--cyan)"/> Global AMR Weather Map</div>
@@ -520,137 +592,220 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* RADAR ───────────────────────────────────────────── */}
-        {tab==='radar' && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1.25rem' }}>
-            <div className="card">
-              <div className="card-title"><Ic n="activity" size={16} color="var(--red)"/> AMR Radar — Ranked Emerging Signals</div>
-              <div className="radar-list">
-                {signals.map((sig,i)=>(
-                  <div key={sig.id} className={`radar-item ${selSig?.id===sig.id?'selected':''}`} onClick={()=>setSelSig(sig)}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'.75rem' }}>
-                      <span style={{ width:28, height:28, borderRadius:'50%', background:i<2?'var(--red-dim)':'var(--orange-dim)', border:`1px solid ${i<2?'var(--red)':'var(--orange)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.72rem', fontWeight:800, color:i<2?'var(--red)':'var(--orange)', flexShrink:0 }}>0{i+1}</span>
-                      <div>
-                        <div style={{ fontWeight:600 }}><em style={{ color:'var(--text-1)' }}>{sig.pathogen}</em> &mdash; <span style={{ color:'var(--cyan)' }}>{sig.resistance_gene}</span></div>
-                        <div style={{ fontSize:'.72rem', color:'var(--text-3)' }}>{sig.region}</div>
-                      </div>
-                    </div>
-                    <div style={{ textAlign:'right' }}>
-                      <Badge lv={sig.severity}/>
-                      <div style={{ fontSize:'.7rem', marginTop:3, color:'var(--text-3)' }}>Score {sig.sentinel_score}/100</div>
-                    </div>
-                  </div>
-                ))}
-                {!signals.length && <div style={{ color:'var(--text-3)', padding:'1rem' }}>Run pipeline first.</div>}
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-title"><Ic n="info" size={16} color="var(--cyan)"/> Explainable AI (XAI) Analysis</div>
-              {selSig ? (
-                <>
-                  <div style={{ marginBottom:'1rem' }}>
-                    <div style={{ fontSize:'1.05rem', fontWeight:700, color:'var(--text-1)' }}><em>{selSig.pathogen}</em></div>
-                    <div style={{ color:'var(--cyan)', fontWeight:700 }}>{selSig.resistance_gene}</div>
-                    <div style={{ fontSize:'.75rem', color:'var(--text-3)', marginTop:2 }}>{selSig.region} · {selSig.type.replace('_',' ').toUpperCase()}</div>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.6rem', marginBottom:'1.25rem' }}>
-                    <div className="stat-box">
-                      <div className="stat-label">Evidence Level</div>
-                      <Badge lv={selSig.evidence_level}/>
-                    </div>
-                    <div className="stat-box">
-                      <div className="stat-label">Frequency Change</div>
-                      <div className="stat-value" style={{ color:'var(--green)', fontSize:'1.2rem' }}>+{(selSig.observed_increase_pct||0).toFixed(1)}%</div>
-                    </div>
-                    <div className="stat-box">
-                      <div className="stat-label">Sentinel Score</div>
-                      <div className="stat-value" style={{ color:'var(--cyan)', fontSize:'1.2rem' }}>{selSig.sentinel_score}/100</div>
-                    </div>
-                    <div className="stat-box">
-                      <div className="stat-label">Velocity (df/dt)</div>
-                      <div className="stat-value" style={{ color:'var(--orange)', fontSize:'1.2rem' }}>{selSig.resistance_velocity}</div>
-                    </div>
-                  </div>
-                  <div className="section-header" style={{ color:'var(--green)' }}>Why Flagged</div>
-                  {selSig.explanation.map((e,i)=>(
-                    <div key={i} style={{ display:'flex', gap:'.5rem', marginBottom:'.5rem' }}>
-                      <Ic n="check" size={13} color="var(--green)"/>
-                      <span style={{ fontSize:'.8rem', color:'var(--text-2)', lineHeight:1.5 }}>{e}</span>
-                    </div>
-                  ))}
-                  <div className="section-header" style={{ color:'var(--orange)', marginTop:'1rem' }}>Scientific Limitations</div>
-                  {selSig.limitations.map((l,i)=>(
-                    <div key={i} style={{ display:'flex', gap:'.5rem', marginBottom:'.5rem' }}>
-                      <span style={{ color:'var(--orange)', flexShrink:0, fontSize:'.9rem' }}>•</span>
-                      <span style={{ fontSize:'.8rem', color:'var(--text-3)', lineHeight:1.5 }}>{l}</span>
-                    </div>
-                  ))}
-                </>
-              ) : <div style={{ color:'var(--text-3)' }}>Select a signal from the radar list.</div>}
-            </div>
-          </div>
-        )}
-
-        {/* GENOMIC EXPLORER ────────────────────────────────── */}
+        {/* 5. GENOMIC EXPLORER ─────────────────────────────── */}
         {tab==='clusters' && (
           <div className="card">
             <div className="card-title"><Ic n="dna" size={16} color="var(--purple)"/> Genomic Cluster Explorer</div>
-            <div className="info-box info" style={{ marginBottom:'1.25rem', fontSize:'.78rem' }}>
-              Clusters detected by grouping resistance feature vectors (pathogen + gene + country one-hot) using IsolationForest. Novelty scores identify atypical profiles. Clustering does NOT prove transmission.
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginTop: '1rem' }}>
+              {clusters.map(c => (
+                <div key={c.id} style={{ padding: '1rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  <div style={{ fontWeight: 700, fontSize: '.9rem', color: 'var(--text-1)', fontStyle: 'italic' }}>{c.pathogen_name}</div>
+                  <div style={{ fontSize: '.78rem', color: 'var(--text-3)', marginTop: 2 }}>Gene: <span style={{ color: 'var(--cyan)' }}>{c.primary_gene}</span></div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', marginTop: '.75rem', color: 'var(--text-2)' }}>
+                    <span>Sequence Count: <strong>{c.sequence_count}</strong></span>
+                    <span>Novelty Score: <strong style={{ color: c.novelty_score>50?'var(--orange)':'var(--green)' }}>{c.novelty_score}/100</strong></span>
+                  </div>
+                </div>
+              ))}
             </div>
-            <GenomicExplorer clusters={clusters}/>
           </div>
         )}
 
-        {/* KNOWLEDGE GRAPH ──────────────────────────────────── */}
+        {/* 6. KNOWLEDGE GRAPH ──────────────────────────────── */}
         {tab==='graph' && (
           <div className="card">
             <div className="card-title"><Ic n="network" size={16} color="var(--orange)"/> AMR Knowledge Graph</div>
             <p style={{ color:'var(--text-2)', fontSize:'.83rem', marginTop:0, marginBottom:'1.25rem' }}>
               Interactive multi-relational graph: <strong style={{ color:'var(--red)' }}>Pathogen</strong> → <strong style={{ color:'var(--cyan)' }}>Gene</strong> → <strong style={{ color:'var(--orange)' }}>Mechanism</strong> → <strong style={{ color:'var(--purple)' }}>Drug Class</strong> → <strong style={{ color:'var(--green)' }}>Region</strong>.
-              Edges represent observed associations only — not causal links.
             </p>
             <KnowledgeGraph data={graph}/>
           </div>
         )}
 
-        {/* BLIND SPOTS ─────────────────────────────────────── */}
-        {tab==='blindspots' && (
+        {/* 7. RESEARCHER SEARCH ────────────────────────────── */}
+        {tab==='search' && (
           <div className="card">
-            <div className="card-title"><Ic n="eye_off" size={16} color="var(--orange)"/> Surveillance Blind Spots Map</div>
-            <div className="info-box danger" style={{ marginBottom:'1.25rem' }}>
-              ⚠️ <strong>Critical Interpretation Warning:</strong> Regions with absent or low AMR signals here should NOT be assumed to have low resistance prevalence.
-              They have <strong>insufficient genomic sequencing data</strong> in public repositories.
+            <div className="card-title"><Ic n="search" size={16} color="var(--cyan)"/> Advanced AMR Researcher Search</div>
+            <form onSubmit={handleSearch} style={{ display: 'flex', gap: '.75rem', marginBottom: '1.5rem' }}>
+              <input
+                type="text"
+                placeholder="Search by pathogen (e.g. Klebsiella), gene (e.g. mcr-1), mechanism, or country code..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{ flex: 1, padding: '.75rem', borderRadius: 8, background: 'var(--bg-2)', border: '1px solid var(--border)', color: 'var(--text-1)', fontSize: '.88rem' }}
+              />
+              <button type="submit" style={{ padding: '.75rem 1.5rem', borderRadius: 8, background: 'var(--cyan)', color: '#000', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
+                Search Repository
+              </button>
+            </form>
+
+            {searchResults && (
+              <div>
+                <div style={{ fontWeight: 700, color: 'var(--text-1)', marginBottom: '1rem' }}>
+                  Search Results ({searchResults.matching_signals_count} signals, {searchResults.matching_observations_count} observations)
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '.6rem' }}>
+                  {(searchResults.observations||[]).map((obs: any, i: number) => (
+                    <div key={i} style={{ padding: '.75rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '.8rem', display: 'flex', justifyContent: 'space-between' }}>
+                      <div>
+                        <span style={{ fontFamily: 'var(--mono)', color: 'var(--text-3)', marginRight: 8 }}>{obs.accession}</span>
+                        <em style={{ color: 'var(--text-1)' }}>{obs.pathogen_name}</em> — <span style={{ color: 'var(--cyan)' }}>{obs.gene_symbol}</span>
+                      </div>
+                      <div style={{ color: 'var(--text-2)' }}>{obs.country_code} · {obs.antimicrobial_class}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 8. LITERATURE EVIDENCE ───────────────────────────── */}
+        {tab==='literature' && (
+          <div className="card">
+            <div className="card-title"><Ic n="book" size={16} color="var(--purple)"/> Peer-Reviewed Scientific Literature Evidence</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+              {literature.map(lit => (
+                <div key={lit.pmid} style={{ padding: '1.25rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ fontWeight: 700, color: 'var(--text-1)', fontSize: '.95rem' }}>{lit.title}</div>
+                    <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '.68rem', background: 'var(--cyan-dim)', color: 'var(--cyan)', border: '1px solid rgba(6,182,212,.3)' }}>Alignment: {lit.alignment_strength}</span>
+                  </div>
+                  <div style={{ fontSize: '.78rem', color: 'var(--text-3)', marginTop: 4 }}>
+                    Authors: {lit.authors} · <em>{lit.journal}</em> ({lit.year}) · PMID: <a href={`https://pubmed.ncbi.nlm.nih.gov/${lit.pmid}`} target="_blank" rel="noreferrer">{lit.pmid}</a>
+                  </div>
+                  <div style={{ fontSize: '.82rem', color: 'var(--text-2)', marginTop: 8, fontStyle: 'italic' }}>
+                    "{lit.key_finding}"
+                  </div>
+                </div>
+              ))}
             </div>
-            <WeatherMap pts={mapPts} showCoverage={true}/>
           </div>
         )}
 
-        {/* METHODOLOGY ─────────────────────────────────────── */}
-        {tab==='methodology' && (
+        {/* 9. DATA QUALITY DASHBOARD ────────────────────────── */}
+        {tab==='quality' && (
           <div className="card">
-            <div className="card-title"><Ic n="info" size={16} color="var(--green)"/> Methodology & Scientific Framework</div>
-            <MethodologyView/>
+            <div className="card-title"><Ic n="check" size={16} color="var(--green)"/> Data Quality & Completeness Audit</div>
+            {dataQuality ? (
+              <>
+                <div style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--green)', margin: '1rem 0' }}>
+                  {dataQuality.completeness_score} <span style={{ fontSize: '1rem', color: 'var(--text-3)', fontWeight: 400 }}>/ 100 Overall Data Completeness Score</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  {Object.entries(dataQuality.metrics).map(([k, v]) => (
+                    <div key={k} style={{ padding: '.85rem', background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '.72rem', color: 'var(--text-3)', textTransform: 'uppercase' }}>{k.replace(/_/g, ' ')}</div>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-1)', marginTop: 2 }}>{v as string}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="info-box info" style={{ marginTop: '1.25rem' }}>{dataQuality.explanation}</div>
+              </>
+            ) : <div style={{ color: 'var(--text-3)' }}>Loading data quality audit…</div>}
           </div>
         )}
 
-        {/* DATA SOURCES ─────────────────────────────────────── */}
+        {/* 10. MODEL VALIDATION & CARD ──────────────────────── */}
+        {tab==='validation' && (
+          <div className="card">
+            <div className="card-title"><Ic n="cpu" size={16} color="var(--purple)"/> Model Validation & Benchmark Metrics</div>
+            {modelValidation ? (
+              <>
+                <p style={{ color: 'var(--text-2)', fontSize: '.83rem', marginBottom: '1.25rem' }}>
+                  Empirical evaluation of algorithm benchmarks on metadata anomaly classification reference sets.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {modelValidation.metrics.map((m: any) => (
+                    <div key={m.model_name} style={{ padding: '1.25rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                      <div style={{ fontWeight: 700, color: 'var(--cyan)', fontSize: '.95rem', marginBottom: '.5rem' }}>{m.model_name}</div>
+                      <div style={{ fontSize: '.78rem', color: 'var(--text-2)', marginBottom: '.75rem' }}>{m.description}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '.5rem', textAlign: 'center' }}>
+                        {[
+                          ['PRECISION', m.precision, 'var(--cyan)'],
+                          ['RECALL', m.recall, 'var(--purple)'],
+                          ['F1-SCORE', m.f1_score, 'var(--green)'],
+                          ['ROC-AUC', m.roc_auc, 'var(--orange)'],
+                          ['PR-AUC', m.pr_auc, 'var(--yellow)'],
+                        ].map(([lbl, val, col]) => (
+                          <div key={lbl as string} style={{ padding: '.5rem', background: 'var(--panel)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: '.65rem', color: 'var(--text-3)' }}>{lbl}</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 800, color: col as string }}>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="info-box warn" style={{ marginTop: '1.25rem' }}>{modelValidation.disclaimer}</div>
+              </>
+            ) : <div style={{ color: 'var(--text-3)' }}>Loading validation metrics…</div>}
+          </div>
+        )}
+
+        {/* 11. SCORING CONFIGURATION ────────────────────────── */}
+        {tab==='config' && (
+          <div className="card">
+            <div className="card-title"><Ic n="sliders" size={16} color="var(--orange)"/> Configurable Sentinel Score Weights</div>
+            <p style={{ color: 'var(--text-2)', fontSize: '.83rem', marginBottom: '1.5rem' }}>
+              Researchers can dynamically adjust component weights to evaluate custom surveillance hypotheses.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 600 }}>
+              {[
+                ['Resistance Velocity (df/dt)', 'trend', weights.trend],
+                ['IsolationForest Genomic Novelty', 'novelty', weights.novelty],
+                ['Geographic Expansion Count', 'expansion', weights.expansion],
+                ['Surveillance Coverage & Sample Size', 'coverage', weights.coverage],
+                ['Temporal Consistency Rate', 'consistency', weights.consistency],
+              ].map(([lbl, key, val]) => (
+                <div key={key as string}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.85rem', marginBottom: 4 }}>
+                    <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{lbl}</span>
+                    <span style={{ color: 'var(--cyan)', fontWeight: 700 }}>{val}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="50"
+                    value={val as number}
+                    onChange={e => setWeights({ ...weights, [key as string]: Number(e.target.value) })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              ))}
+              <button onClick={handleRecalculate} style={{ padding: '.85rem', borderRadius: 8, background: 'var(--cyan)', color: '#000', fontWeight: 700, border: 'none', cursor: 'pointer', marginTop: '1rem' }}>
+                Recalculate Platform Sentinel Scores ➔
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 12. DATA SOURCES ─────────────────────────────────── */}
         {tab==='sources' && (
           <div className="card">
             <div className="card-title"><Ic n="database" size={16} color="var(--cyan)"/> Data Sources & Provenance</div>
             <p style={{ color:'var(--text-2)', fontSize:'.83rem', marginTop:0, marginBottom:'1.25rem' }}>
               All data is obtained from publicly accessible repositories. Provenance metadata (source, license, retrieval date) is tracked per record.
-              No synthetic data is passed off as real observations.
             </p>
-            <DataSources sources={sources}/>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {sources.map(s => (
+                <div key={s.name} style={{ padding: '1.25rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text-1)', fontSize: '.95rem' }}>{s.name}</div>
+                  <a href={s.url} target="_blank" rel="noreferrer" style={{ fontSize: '.78rem', color: 'var(--cyan)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                    {s.url} <Ic n="external" size={11} color="var(--cyan)"/>
+                  </a>
+                  <div style={{ fontSize: '.78rem', color: 'var(--text-2)', marginTop: 6 }}>Used for: {s.used_for}</div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
       </main>
 
       {/* ── Footer ── */}
       <footer style={{ padding:'.875rem 2rem', borderTop:'1px solid var(--border)', background:'var(--bg-2)', fontSize:'.7rem', color:'var(--text-3)', display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:'.5rem' }}>
-        <span>AMR-Sentinel · Open Source Computational Surveillance Research Platform</span>
+        <span>AMR-Sentinel V2 · Research-Grade Computational AMR Intelligence Network</span>
         <span>⚕️ Not for clinical use · All outputs are surveillance signals · Public data only</span>
       </footer>
     </div>

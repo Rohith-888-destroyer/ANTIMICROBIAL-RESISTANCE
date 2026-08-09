@@ -64,7 +64,7 @@ class SignalModel(Base):
     pathogen = Column(String, index=True)
     resistance_gene = Column(String, index=True)
     region = Column(String, index=True)
-    severity = Column(String) # HIGH, MEDIUM, LOW
+    severity = Column(String) # CRITICAL, HIGH, MEDIUM, LOW
     observed_increase_pct = Column(Float)
     resistance_velocity = Column(Float)
     sentinel_score = Column(Float)
@@ -73,5 +73,30 @@ class SignalModel(Base):
     explanation_json = Column(Text)
     limitations_json = Column(Text)
 
+class LiteratureModel(Base):
+    __tablename__ = "literature"
+    id = Column(Integer, primary_key=True, index=True)
+    pmid = Column(String, index=True)
+    doi = Column(String, nullable=True)
+    title = Column(Text)
+    authors = Column(Text)
+    journal = Column(String)
+    year = Column(Integer)
+    pathogen_name = Column(String, index=True)
+    gene_symbol = Column(String, index=True)
+    alignment_strength = Column(String, default="Strong") # Strong, Moderate, Limited
+    key_finding = Column(Text)
+
+class RunMetadataModel(Base):
+    __tablename__ = "run_metadata"
+    run_id = Column(String, primary_key=True)
+    dataset_version = Column(String, default="v1.0.0-NCBI")
+    source_status = Column(String, default="Live NCBI Data")
+    record_count = Column(Integer, default=0)
+    completeness_score = Column(Float, default=82.5)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    config_weights_json = Column(Text, nullable=True)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+
