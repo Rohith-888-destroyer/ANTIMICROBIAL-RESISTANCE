@@ -1,20 +1,28 @@
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import IsolationForest
 from typing import Dict, List, Tuple
+
+try:
+    from sklearn.ensemble import IsolationForest
+    _HAS_SKLEARN = True
+except ImportError:
+    _HAS_SKLEARN = False
 
 class GenomicNoveltyDetector:
     """
-    IsolationForest anomaly detector on genomic feature matrices & k-mer embeddings.
+    IsolationForest / Distance anomaly detector on genomic feature matrices & k-mer embeddings.
     Identifies unusual or emerging resistance profiles.
     """
     def __init__(self, contamination: float = 0.1):
-        self.model = IsolationForest(contamination=contamination, random_state=42)
+        if _HAS_SKLEARN:
+            self.model = IsolationForest(contamination=contamination, random_state=42)
+        else:
+            self.model = None
 
     def extract_features(self, df: pd.DataFrame) -> Tuple[np.ndarray, List[str]]:
         # One-hot encode pathogen, gene, mechanism, and region features
         features = pd.get_dummies(df[["pathogen_name", "gene_symbol", "mechanism", "country_code"]])
-        return features.values, list(df["accession"].values)
+        return features.values.astype(np.float64), list(df["accession"].values)
 
     def compute_novelty_scores(self, df: pd.DataFrame) -> pd.DataFrame:
         if len(df) < 5:
@@ -23,12 +31,21 @@ class GenomicNoveltyDetector:
             return df
 
         X, accessions = self.extract_features(df)
-        self.model.fit(X)
-        scores = -self.model.score_samples(X)  # Higher = more atypical / novel
         
+        if self.model is not None:
+            self.model.fit(X)
+            scores = -self.model.score_samples(X)  # Higher = more atypical / novel
+        else:
+            # Lightweight distance-to-mean novelty score using numpy (zero-dependency fallback)
+            mean_vec = np.mean(X, axis=0)
+            scores = np.linalg.norm(X - mean_vec, axis=1)
+
         # Normalize scores to 0 - 100 range
         min_s, max_s = scores.min(), scores.max()
-        norm_scores = (scores - min_s) / (max_s - min_s + 1e-6) * 100.0
+        if max_s > min_s:
+            norm_scores = (scores - min_s) / (max_s - min_s) * 100.0
+        else:
+            norm_scores = np.zeros_like(scores)
 
         df["novelty_score"] = np.round(norm_scores, 1)
 
@@ -43,3 +60,4 @@ class GenomicNoveltyDetector:
 
         df["novelty_classification"] = df["novelty_score"].apply(classify)
         return df
+
