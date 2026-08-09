@@ -56,11 +56,11 @@ def ensure_db_ready():
                     logger.info("Database empty — running fast seed pipeline for instant startup...")
                     from scripts.run_pipeline import run_full_pipeline
                     run_full_pipeline(use_fast_seed=True)
+                _db_initialized = True
             except Exception as exc:
                 logger.warning(f"Auto-seeding database failed: {exc}")
             finally:
                 db.close()
-            _db_initialized = True
         except Exception as exc:
             logger.error(f"Database initialization failed: {exc}")
 

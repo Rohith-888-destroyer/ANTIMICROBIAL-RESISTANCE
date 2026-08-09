@@ -102,8 +102,12 @@ class NCBIPathogenAdapter:
     DATA_LICENSE   = "NCBI Public"
 
     def __init__(self, cache_dir: Optional[Path] = None, api_key: Optional[str] = None):
-        self.cache_dir = cache_dir or (Path(__file__).parent.parent.parent / "data" / "cache")
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        from backend.app.config import DATA_CACHE_DIR
+        self.cache_dir = cache_dir or DATA_CACHE_DIR
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
         self.api_key   = api_key or os.getenv("NCBI_API_KEY", "")
         self.session   = requests.Session()
         self.session.headers.update({"User-Agent": "AMR-Sentinel/1.0 (research; amr-sentinel@github)"})
