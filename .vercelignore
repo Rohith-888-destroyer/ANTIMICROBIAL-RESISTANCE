@@ -1,0 +1,18 @@
+# Node modules & frontend source dependencies
+node_modules
+dashboard/node_modules
+
+# Git & Cache
+.git
+.github
+.pytest_cache
+.vscode
+
+# Tests & Documentation
+tests
+docs
+
+# Data cache & raw datasets
+data/raw
+data/processed
+data/cache
