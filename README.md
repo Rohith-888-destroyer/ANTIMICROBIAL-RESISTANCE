@@ -4,10 +4,11 @@
 
 > A production-quality computational surveillance platform that continuously analyses public genomic, microbiological, and environmental data to detect emerging antimicrobial-resistance signals before they become obvious trends.
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FRohith-888-destroyer%2FANTIMICROBIAL-RESISTANCE)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-green.svg)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-teal.svg)](https://fastapi.tiangolo.com)
-[![React 18](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev)
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-green.svg)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-teal.svg)](https://fastapi.tiangolo.com)
+[![React 19](https://img.shields.io/badge/React-19-blue.svg)](https://react.dev)
 
 ---
 
