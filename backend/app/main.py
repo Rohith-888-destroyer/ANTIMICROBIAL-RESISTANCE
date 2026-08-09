@@ -53,9 +53,9 @@ def ensure_db_ready():
             db = SessionLocal()
             try:
                 if db.query(ObservationModel).count() == 0:
-                    logger.info("Database empty — running pipeline to seed initial records...")
+                    logger.info("Database empty — running fast seed pipeline for instant startup...")
                     from scripts.run_pipeline import run_full_pipeline
-                    run_full_pipeline()
+                    run_full_pipeline(use_fast_seed=True)
             except Exception as exc:
                 logger.warning(f"Auto-seeding database failed: {exc}")
             finally:

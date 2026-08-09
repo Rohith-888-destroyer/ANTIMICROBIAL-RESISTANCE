@@ -17,15 +17,18 @@ from src.signals.knowledge_graph import AMRKnowledgeGraph
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def run_full_pipeline():
+def run_full_pipeline(use_fast_seed: bool = False):
     logger.info("Initializing database schema...")
     init_db()
     db: Session = SessionLocal()
 
     # Step 1: Ingest NCBI Pathogen Isolates Data
-    logger.info("Step 1: Fetching NCBI AMR isolate data...")
+    logger.info("Step 1: Fetching AMR isolate data...")
     adapter = NCBIPathogenAdapter()
-    df = adapter.fetch_real_or_structured_records(sample_size=200)
+    if use_fast_seed:
+        df = adapter._build_seed_dataset(sample_size=150)
+    else:
+        df = adapter.fetch_real_or_structured_records(sample_size=200)
 
     # Step 2: Novelty Detection
     logger.info("Step 2: Scoring Genomic Novelty with IsolationForest...")
