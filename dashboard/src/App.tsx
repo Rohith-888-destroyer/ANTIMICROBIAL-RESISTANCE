@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './index.css';
+import { api } from './lib/api';
 
 /* ═══════════════════════════════════════════════════════════════
    INLINE SVG ICON SET  (no extra dependency)
@@ -25,6 +26,7 @@ const PATHS: Record<string, string> = {
   sliders:    'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
   download:   'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
   cpu:        'M18 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zM9 9h6v6H9z',
+  refresh:    'M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
 };
 const Ic = ({ n, size = 16, color = 'currentColor' }: { n: string; size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -44,7 +46,7 @@ interface GEdge    { from:string; to:string; label:string; }
 interface Graph    { nodes:GNode[]; edges:GEdge[]; }
 interface DataSrc  { name:string; url:string; type:string; license:string; update_freq:string; used_for:string; status?:string; }
 interface Changed  { briefing_title:string; generated_date:string; highlights:string[]; primary_signal:string; disclaimer:string; }
-interface DataStatus { status:string; last_updated:string; run_id:string; dataset_version:string; total_records:number; completeness_score:number; sources:string[]; }
+interface DataStatus { status:string; mode:string; source:string; last_updated:string; run_id:string; dataset_version:string; isolates?:number; total_records?:number; completeness_score?:number; data_completeness?:number; pipeline_status?:string; sources?:string[]; }
 interface LitItem   { pmid:string; doi?:string; title:string; authors:string; journal:string; year:number; pathogen_name:string; gene_symbol:string; alignment_strength:string; key_finding:string; }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -72,12 +74,27 @@ const ScoreRow = ({ label, val, color }: { label:string; val:number; color:strin
 /* ═══════════════════════════════════════════════════════════════
    AMR WEATHER MAP
 ═══════════════════════════════════════════════════════════════ */
-const WeatherMap = ({ pts, showCoverage }: { pts:MapPt[]; showCoverage:boolean }) => {
+const WeatherMap = ({ pts, showCoverage, onRetry }: { pts:MapPt[]; showCoverage:boolean; onRetry?:()=>void }) => {
   const [hov, setHov] = useState<MapPt|null>(null);
   const px = (lat:number, lon:number) => ({ x:((lon+180)/360)*940, y:((90-lat)/180)*480 });
   const sigCol = (l:string) => l==='High'?'rgba(239,68,68,.7)':l==='Moderate'?'rgba(249,115,22,.6)':'rgba(16,185,129,.5)';
   const bdrCol = (l:string) => l==='High'?'#ef4444':l==='Moderate'?'#f97316':'#10b981';
   const covCol = (c:string) => c==='High'?'#10b981':c==='Moderate'?'#06b6d4':c==='Low'?'#f97316':'#ef4444';
+
+  if (!pts || pts.length === 0) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center', background: '#070e1e', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <Ic n="globe" size={32} color="var(--text-3)"/>
+        <div style={{ fontSize: '1rem', color: 'var(--text-1)', fontWeight: 600, marginTop: '1rem' }}>Geographic Surveillance Data Unavailable</div>
+        <div style={{ fontSize: '.8rem', color: 'var(--text-3)', marginTop: 4 }}>The map layer could not load spatial records from the backend API.</div>
+        {onRetry && (
+          <button onClick={onRetry} style={{ marginTop: '1rem', padding: '.5rem 1.25rem', borderRadius: 6, background: 'var(--cyan)', color: '#000', fontWeight: 600, border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Ic n="refresh" size={14} color="#000"/> Retry Loading Map
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ position:'relative' }}>
@@ -144,9 +161,33 @@ const WeatherMap = ({ pts, showCoverage }: { pts:MapPt[]; showCoverage:boolean }
 ═══════════════════════════════════════════════════════════════ */
 const GROUP_COLORS: Record<string,string> = { Pathogen:'#ef4444', Gene:'#06b6d4', Mechanism:'#f97316', 'Drug Class':'#a855f7', Region:'#10b981' };
 
-const KnowledgeGraph = ({ data }: { data:Graph|null }) => {
+const KnowledgeGraph = ({ data, loading, onRetry }: { data:Graph|null; loading:boolean; onRetry?:()=>void }) => {
   const [sel, setSel] = useState<string|null>(null);
-  if (!data || !data.nodes.length) return <div style={{ color:'var(--text-3)', padding:'2rem', textAlign:'center' }}>Loading AMR Knowledge Graph…</div>;
+  
+  if (loading) {
+    return (
+      <div style={{ color:'var(--cyan)', padding:'3rem', textAlign:'center' }}>
+        <Ic n="network" size={32} color="var(--cyan)"/>
+        <div style={{ marginTop: '1rem', fontWeight: 600 }}>Loading AMR Knowledge Graph data...</div>
+      </div>
+    );
+  }
+
+  if (!data || !data.nodes || !data.nodes.length) {
+    return (
+      <div style={{ padding: '3rem', textAlign: 'center', background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+        <Ic n="network" size={32} color="var(--text-3)"/>
+        <div style={{ fontSize: '1rem', color: 'var(--text-1)', fontWeight: 600, marginTop: '1rem' }}>Knowledge Graph Data Unavailable</div>
+        <div style={{ fontSize: '.8rem', color: 'var(--text-3)', marginTop: 4 }}>Unable to construct multi-relational graph from the backend API.</div>
+        {onRetry && (
+          <button onClick={onRetry} style={{ marginTop: '1rem', padding: '.5rem 1.25rem', borderRadius: 6, background: 'var(--cyan)', color: '#000', fontWeight: 600, border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Ic n="refresh" size={14} color="#000"/> Retry Loading Graph
+          </button>
+        )}
+      </div>
+    );
+  }
+
   const groups = [...new Set(data.nodes.map(n=>n.group))];
   const selEdges = sel ? data.edges.filter(e=>e.from===sel||e.to===sel) : [];
   const connIds  = new Set(selEdges.flatMap(e=>[e.from,e.to]));
@@ -221,6 +262,10 @@ export const App: React.FC = () => {
   const [modelValidation, setModelValidation] = useState<any>(null);
   const [sources, setSources]     = useState<DataSrc[]>([]);
 
+  // State management for API status
+  const [loading, setLoading]     = useState<boolean>(true);
+  const [apiError, setApiError]   = useState<string|null>(null);
+
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any>(null);
@@ -228,55 +273,82 @@ export const App: React.FC = () => {
   // Config weights state
   const [weights, setWeights] = useState({ trend: 30, novelty: 25, expansion: 20, coverage: 15, consistency: 10 });
 
+  const loadAllData = async () => {
+    setLoading(true);
+    setApiError(null);
+    try {
+      const [
+        ds, ov, sigs, mp, cl, gr, ch, lit, dq, mv, src
+      ] = await Promise.all([
+        api.getDataStatus().catch(() => null),
+        api.getOverview().catch(() => null),
+        api.getSignals().catch(() => []),
+        api.getMap().catch(() => []),
+        api.getClusters().catch(() => []),
+        api.getKnowledgeGraph().catch(() => null),
+        api.getWhatChanged().catch(() => null),
+        api.getLiterature().catch(() => []),
+        api.getDataQuality().catch(() => null),
+        api.getModelValidation().catch(() => null),
+        api.getDataSources().catch(() => ({ sources: [] })),
+      ]);
+
+      if (!ov && sigs.length === 0 && !ds) {
+        setApiError("Production data source could not be reached. Serverless API endpoint returned no response.");
+      } else {
+        setDataStatus(ds);
+        setOverview(ov);
+        setSignals(sigs);
+        if (sigs.length > 0) setSelSig(sigs[0]);
+        setMapPts(mp);
+        setClusters(cl);
+        setGraph(gr);
+        setChanged(ch);
+        setLiterature(lit);
+        setDataQuality(dq);
+        setModelValidation(mv);
+        setSources(src?.sources || []);
+      }
+    } catch (err: any) {
+      setApiError(err?.message || "Failed to communicate with AMR-Sentinel backend API.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetch('/api/data-status').then(r=>r.json()).then(setDataStatus).catch(()=>{});
-    fetch('/api/overview').then(r=>r.json()).then(setOverview).catch(()=>{});
-    fetch('/api/signals').then(r=>r.json()).then((d:Signal[])=>{ setSignals(d); if(d.length) setSelSig(d[0]); }).catch(()=>{});
-    fetch('/api/map').then(r=>r.json()).then(setMapPts).catch(()=>{});
-    fetch('/api/clusters').then(r=>r.json()).then(setClusters).catch(()=>{});
-    fetch('/api/knowledge-graph').then(r=>r.json()).then(setGraph).catch(()=>{});
-    fetch('/api/what-changed').then(r=>r.json()).then(setChanged).catch(()=>{});
-    fetch('/api/literature').then(r=>r.json()).then(setLiterature).catch(()=>{});
-    fetch('/api/data-quality').then(r=>r.json()).then(setDataQuality).catch(()=>{});
-    fetch('/api/model-validation').then(r=>r.json()).then(setModelValidation).catch(()=>{});
-    fetch('/api/data-sources').then(r=>r.json()).then((d:any)=>setSources(d.sources||[])).catch(()=>{});
+    loadAllData();
   }, []);
 
   // Fetch investigation details when selSig changes
   useEffect(() => {
     if (selSig) {
-      fetch(`/api/signals/${selSig.id}/investigation`)
-        .then(r => r.json())
+      api.getSignalInvestigation(selSig.id)
         .then(setInvestigation)
-        .catch(() => {});
+        .catch(() => setInvestigation(null));
     }
   }, [selSig]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetch('/api/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: searchQuery })
-    }).then(r => r.json()).then(setSearchResults).catch(() => {});
+    api.search({ query: searchQuery })
+      .then(setSearchResults)
+      .catch(() => {});
   };
 
   const handleRecalculate = () => {
-    fetch('/api/config/recalculate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ weights })
-    }).then(r => r.json()).then(d => {
-      setSignals(d.signals);
-      if (d.signals.length) setSelSig(d.signals[0]);
-      alert('Sentinel Scores recalculated successfully with custom weights!');
-    }).catch(() => {});
+    api.recalculateScores(weights)
+      .then(d => {
+        setSignals(d.signals);
+        if (d.signals.length) setSelSig(d.signals[0]);
+        alert('Sentinel Scores recalculated successfully with custom weights!');
+      })
+      .catch((err) => alert(`Recalculation failed: ${err.message}`));
   };
 
   const handleExportReport = () => {
     if (!selSig) return;
-    fetch(`/api/export/report/${selSig.id}`)
-      .then(r => r.json())
+    api.exportReport(selSig.id)
       .then(data => {
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -292,7 +364,7 @@ export const App: React.FC = () => {
     { id:'radar',         icon:'activity', label:'Discover Signals' },
     { id:'investigation', icon:'search',   label:'Signal Investigation' },
     { id:'weather',       icon:'globe',    label:'AMR Weather' },
-    { id:'clusters',      icon:'dna',      label:'Genomic Explorer' },
+    { id:'clusters',      icon:'dna',      label:'Pattern Explorer' },
     { id:'graph',         icon:'network',  label:'Knowledge Graph' },
     { id:'search',        icon:'search',   label:'Researcher Search' },
     { id:'literature',    icon:'book',     label:'Literature Evidence' },
@@ -310,18 +382,38 @@ export const App: React.FC = () => {
       {/* ── Top Data Status Header Bar ── */}
       <div style={{ background: '#050a14', borderBottom: '1px solid var(--border)', padding: '.4rem 2rem', fontSize: '.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ color: 'var(--green)', fontWeight: 700 }}>{dataStatus?.status || '🟢 Live NCBI Data'}</span>
+          <span style={{ color: dataStatus?.mode==='live'?'var(--green)':dataStatus?.mode==='demo'?'var(--orange)':'var(--red)', fontWeight: 700 }}>
+            {dataStatus?.status || (apiError ? '🔴 DATA UNAVAILABLE' : '🟡 STRUCTURED SEED DATASET')}
+          </span>
           <span style={{ color: 'var(--text-3)' }}>•</span>
           <span style={{ color: 'var(--text-2)' }}>Run ID: <strong style={{ color: 'var(--cyan)', fontFamily: 'var(--mono)' }}>{dataStatus?.run_id || 'AMR-2026-08-09-001'}</strong></span>
           <span style={{ color: 'var(--text-3)' }}>•</span>
-          <span style={{ color: 'var(--text-2)' }}>Records Analyzed: <strong style={{ color: 'var(--text-1)' }}>{dataStatus?.total_records || 250} isolates</strong></span>
+          <span style={{ color: 'var(--text-2)' }}>Records Analyzed: <strong style={{ color: 'var(--text-1)' }}>{dataStatus?.isolates || dataStatus?.total_records || (ov ? ov.observations_analyzed : '—')} isolates</strong></span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span style={{ color: 'var(--text-2)' }}>Data Completeness: <strong style={{ color: 'var(--orange)' }}>{dataStatus?.completeness_score || 84.5} / 100</strong></span>
+          <span style={{ color: 'var(--text-2)' }}>Data Completeness: <strong style={{ color: 'var(--orange)' }}>{dataStatus?.completeness_score || dataStatus?.data_completeness || 84.5} / 100</strong></span>
           <span style={{ color: 'var(--text-3)' }}>•</span>
           <span style={{ color: 'var(--text-3)' }}>Last Updated: {dataStatus?.last_updated ? new Date(dataStatus.last_updated).toLocaleString() : 'Just now'}</span>
+          <button onClick={loadAllData} style={{ background: 'transparent', border: 'none', color: 'var(--cyan)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: '.72rem' }}>
+            <Ic n="refresh" size={12} color="var(--cyan)"/> Refresh
+          </button>
         </div>
       </div>
+
+      {/* ── API Error Banner ── */}
+      {apiError && (
+        <div style={{ background: 'rgba(239, 68, 68, 0.15)', borderBottom: '1px solid var(--red)', padding: '.75rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fca5a5', fontSize: '.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
+            <Ic n="alert" size={18} color="var(--red)"/>
+            <div>
+              <strong>DATA STATUS: 🔴 Data unavailable</strong> — {apiError}
+            </div>
+          </div>
+          <button onClick={loadAllData} style={{ padding: '.35rem .85rem', borderRadius: 6, background: 'var(--red)', color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+            Retry Connection
+          </button>
+        </div>
+      )}
 
       {/* ── Navbar ── */}
       <header className="navbar">
@@ -343,18 +435,19 @@ export const App: React.FC = () => {
         </nav>
 
         <div className="status-pill">
-          <span className="status-dot"/>LIVE METADATA
+          <span className="status-dot" style={{ background: dataStatus?.mode==='live'?'#10b981':'#f97316' }}/>
+          {dataStatus?.mode==='live'?'LIVE DATA':dataStatus?.mode==='demo'?'DEMO/SEED DATA':'DATA SYSTEM'}
         </div>
       </header>
 
       {/* ── Metric Bar ── */}
       <div className="metric-bar">
         {[
-          { icon:'alert',    val: ov?.active_signals??'—',            sub:`${ov?.high_priority_signals??'—'} HIGH PRIORITY`, label:'Active Signals',   col:'var(--red)' },
-          { icon:'zap',      val: ov?.average_sentinel_score??'—',    sub:'/ 100 composite score',       label:'Avg Sentinel Score',col:'var(--cyan)' },
-          { icon:'dna',      val: ov?.genomic_clusters??'—',          sub:'emerging clusters',            label:'Genomic Clusters',  col:'var(--purple)' },
-          { icon:'globe',    val: ov?.monitored_countries??'—',       sub:'surveillance regions',         label:'Countries Monitored',col:'var(--green)' },
-          { icon:'bar',      val: ov?.observations_analyzed??'—',     sub:'isolate records',              label:'Isolates Analyzed', col:'var(--orange)' },
+          { icon:'alert',    val: apiError ? '—' : (ov?.active_signals ?? signals.length),            sub: apiError ? 'Data unavailable' : `${ov?.high_priority_signals ?? signals.filter(s=>s.severity==='HIGH').length} HIGH PRIORITY`, label:'Active Signals',   col:'var(--red)' },
+          { icon:'zap',      val: apiError ? '—' : (ov?.average_sentinel_score ?? (signals.length ? round(signals.reduce((a,b)=>a+b.sentinel_score,0)/signals.length,1) : '—')),    sub:'/ 100 composite score',       label:'Avg Sentinel Score',col:'var(--cyan)' },
+          { icon:'dna',      val: apiError ? '—' : (ov?.genomic_clusters ?? clusters.length),          sub:'pattern clusters',            label:'AMR Pattern Clusters',  col:'var(--purple)' },
+          { icon:'globe',    val: apiError ? '—' : (ov?.monitored_countries ?? mapPts.length),       sub:'surveillance regions',         label:'Countries Monitored',col:'var(--green)' },
+          { icon:'bar',      val: apiError ? '—' : (ov?.observations_analyzed ?? dataStatus?.isolates ?? '—'),     sub:'isolate records',              label:'Isolates Analyzed', col:'var(--orange)' },
         ].map(m => (
           <div key={m.label} className="metric-chip">
             <Ic n={m.icon} size={18} color={m.col}/>
@@ -377,21 +470,27 @@ export const App: React.FC = () => {
             {/* AMR Radar Top Signals */}
             <div className="card">
               <div className="card-title"><Ic n="activity" size={16} color="var(--red)"/> Active AMR Signals — High Priority</div>
-              {signals.slice(0,5).map((sig,i)=>(
-                <div key={sig.id} className="radar-item" onClick={()=>{ setSelSig(sig); setTab('investigation'); }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:'.75rem' }}>
-                    <span style={{ width:26, height:26, borderRadius:'50%', background:i<2?'var(--red-dim)':'var(--orange-dim)', border:`1px solid ${i<2?'var(--red)':'var(--orange)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.72rem', fontWeight:800, color:i<2?'var(--red)':'var(--orange)', flexShrink:0 }}>0{i+1}</span>
-                    <div>
-                      <div style={{ fontWeight:600, fontSize:'.88rem' }}><em>{sig.pathogen}</em> — <span style={{ color:'var(--cyan)' }}>{sig.resistance_gene}</span></div>
-                      <div style={{ fontSize:'.72rem', color:'var(--text-3)' }}>Velocity {sig.resistance_velocity} · Score {sig.sentinel_score}/100</div>
+              {signals.length > 0 ? (
+                signals.slice(0,5).map((sig,i)=>(
+                  <div key={sig.id} className="radar-item" onClick={()=>{ setSelSig(sig); setTab('investigation'); }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'.75rem' }}>
+                      <span style={{ width:26, height:26, borderRadius:'50%', background:i<2?'var(--red-dim)':'var(--orange-dim)', border:`1px solid ${i<2?'var(--red)':'var(--orange)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.72rem', fontWeight:800, color:i<2?'var(--red)':'var(--orange)', flexShrink:0 }}>0{i+1}</span>
+                      <div>
+                        <div style={{ fontWeight:600, fontSize:'.88rem' }}><em>{sig.pathogen}</em> — <span style={{ color:'var(--cyan)' }}>{sig.resistance_gene}</span></div>
+                        <div style={{ fontSize:'.72rem', color:'var(--text-3)' }}>Velocity {sig.resistance_velocity} · Score {sig.sentinel_score}/100</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <Badge lv={sig.severity}/>
+                      <div style={{ fontSize: '.68rem', color: 'var(--cyan)', marginTop: 3 }}>Investigate ➔</div>
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <Badge lv={sig.severity}/>
-                    <div style={{ fontSize: '.68rem', color: 'var(--cyan)', marginTop: 3 }}>Investigate ➔</div>
-                  </div>
+                ))
+              ) : (
+                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-3)' }}>
+                  {apiError ? "Unable to retrieve signals." : "No active surveillance signals found."}
                 </div>
-              ))}
+              )}
             </div>
 
             {/* What Changed */}
@@ -408,7 +507,11 @@ export const App: React.FC = () => {
                   ))}
                   <div className="info-box info" style={{ marginTop:'.75rem', fontSize:'.72rem' }}>{changed.disclaimer}</div>
                 </>
-              ) : <div style={{ color:'var(--text-3)' }}>Loading intelligence brief…</div>}
+              ) : (
+                <div style={{ color:'var(--text-3)', padding: '1.5rem', textAlign: 'center' }}>
+                  {apiError ? "Unable to generate intelligence briefing because current surveillance data is unavailable." : "Loading intelligence brief…"}
+                </div>
+              )}
             </div>
 
             {/* Platform Workflow */}
@@ -440,67 +543,66 @@ export const App: React.FC = () => {
             <div className="card">
               <div className="card-title"><Ic n="activity" size={16} color="var(--red)"/> Ranked Emerging Signals</div>
               <div className="radar-list">
-                {signals.map((sig,i)=>(
-                  <div key={sig.id} className={`radar-item ${selSig?.id===sig.id?'selected':''}`} onClick={()=>{ setSelSig(sig); setTab('investigation'); }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'.75rem' }}>
-                      <span style={{ width:28, height:28, borderRadius:'50%', background:i<2?'var(--red-dim)':'var(--orange-dim)', border:`1px solid ${i<2?'var(--red)':'var(--orange)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.72rem', fontWeight:800, color:i<2?'var(--red)':'var(--orange)', flexShrink:0 }}>0{i+1}</span>
-                      <div>
-                        <div style={{ fontWeight:600 }}><em style={{ color:'var(--text-1)' }}>{sig.pathogen}</em> &mdash; <span style={{ color:'var(--cyan)' }}>{sig.resistance_gene}</span></div>
-                        <div style={{ fontSize:'.72rem', color:'var(--text-3)' }}>{sig.region}</div>
+                {signals.length > 0 ? (
+                  signals.map((sig,i)=>(
+                    <div key={sig.id} className={`radar-item ${selSig?.id===sig.id?'selected':''}`} onClick={()=>{ setSelSig(sig); setTab('investigation'); }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'.75rem' }}>
+                        <span style={{ width:28, height:28, borderRadius:'50%', background:i<2?'var(--red-dim)':'var(--orange-dim)', border:`1px solid ${i<2?'var(--red)':'var(--orange)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'.72rem', fontWeight:800, color:i<2?'var(--red)':'var(--orange)', flexShrink:0 }}>0{i+1}</span>
+                        <div>
+                          <div style={{ fontWeight:600 }}><em style={{ color:'var(--text-1)' }}>{sig.pathogen}</em> &mdash; <span style={{ color:'var(--cyan)' }}>{sig.resistance_gene}</span></div>
+                          <div style={{ fontSize:'.72rem', color:'var(--text-3)' }}>{sig.region}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign:'right' }}>
+                        <Badge lv={sig.severity}/>
+                        <div style={{ fontSize:'.72rem', color:'var(--text-2)', marginTop:2 }}>Score {sig.sentinel_score}/100</div>
                       </div>
                     </div>
-                    <div style={{ textAlign:'right' }}>
-                      <Badge lv={sig.severity}/>
-                      <div style={{ fontSize:'.7rem', marginTop:3, color:'var(--cyan)', fontWeight: 600 }}>Investigate ➔</div>
-                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-3)' }}>
+                    {apiError ? "Unable to retrieve signals from backend." : "No active surveillance signals available."}
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
+            {/* Quick Signal Summary */}
             <div className="card">
-              <div className="card-title"><Ic n="info" size={16} color="var(--cyan)"/> Signal Overview & Quick Stats</div>
+              <div className="card-title"><Ic n="info" size={16} color="var(--cyan)"/> Signal Quick Summary</div>
               {selSig ? (
-                <>
-                  <div style={{ marginBottom:'1rem' }}>
-                    <div style={{ fontSize:'1.15rem', fontWeight:700, color:'var(--text-1)' }}><em>{selSig.pathogen}</em></div>
-                    <div style={{ color:'var(--cyan)', fontWeight:700, fontSize: '1.05rem' }}>{selSig.resistance_gene}</div>
-                    <div style={{ fontSize:'.78rem', color:'var(--text-3)', marginTop:2 }}>Region: {selSig.region} · Type: {selSig.type.replace('_',' ').toUpperCase()}</div>
-                  </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'.6rem', marginBottom:'1.25rem' }}>
-                    <div className="stat-box">
-                      <div className="stat-label">Severity Category</div>
-                      <Badge lv={selSig.severity}/>
+                <div>
+                  <div style={{ fontSize: '.75rem', color: 'var(--text-3)', fontFamily: 'var(--mono)' }}>SIGNAL ID: {selSig.id}</div>
+                  <h3 style={{ fontSize: '1.2rem', color: 'var(--text-1)', fontStyle: 'italic', margin: '6px 0' }}>{selSig.pathogen}</h3>
+                  <div style={{ fontSize: '1rem', color: 'var(--cyan)', fontWeight: 700 }}>Gene: {selSig.resistance_gene}</div>
+                  <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '.75rem' }}>
+                    <div style={{ padding: '.75rem', background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '.68rem', color: 'var(--text-3)', textTransform: 'uppercase' }}>Sentinel Score</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--cyan)' }}>{selSig.sentinel_score} / 100</div>
                     </div>
-                    <div className="stat-box">
-                      <div className="stat-label">Sentinel Score</div>
-                      <div className="stat-value" style={{ color:'var(--cyan)', fontSize:'1.2rem' }}>{selSig.sentinel_score} / 100</div>
-                    </div>
-                    <div className="stat-box">
-                      <div className="stat-label">Velocity (df/dt)</div>
-                      <div className="stat-value" style={{ color:'var(--orange)', fontSize:'1.2rem' }}>{selSig.resistance_velocity}</div>
-                    </div>
-                    <div className="stat-box">
-                      <div className="stat-label">Observed Change</div>
-                      <div className="stat-value" style={{ color:'var(--green)', fontSize:'1.2rem' }}>+{(selSig.observed_increase_pct||0).toFixed(1)}%</div>
+                    <div style={{ padding: '.75rem', background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '.68rem', color: 'var(--text-3)', textTransform: 'uppercase' }}>Resistance Velocity</div>
+                      <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--red)' }}>{selSig.resistance_velocity}</div>
                     </div>
                   </div>
-                  <button onClick={()=>setTab('investigation')} style={{ width: '100%', padding: '.75rem', borderRadius: 8, background: 'var(--cyan)', color: '#000', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
-                    Open Full Signal Investigation Page ➔
+                  <button onClick={()=>setTab('investigation')} style={{ marginTop: '1.25rem', width: '100%', padding: '.75rem', borderRadius: 8, background: 'var(--cyan)', color: '#000', fontWeight: 700, border: 'none', cursor: 'pointer' }}>
+                    Full Signal XAI & Literature Investigation ➔
                   </button>
-                </>
-              ) : <div style={{ color:'var(--text-3)' }}>Select a signal from the radar list.</div>}
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-3)', padding: '2rem', textAlign: 'center' }}>Select a signal from the list.</div>
+              )}
             </div>
           </div>
         )}
 
-        {/* 3. SIGNAL INVESTIGATION PAGE ────────────────────── */}
+        {/* 3. SIGNAL INVESTIGATION (XAI) ───────────────────── */}
         {tab==='investigation' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:'1.25rem' }}>
+          <div>
             {selSig && investigation ? (
               <>
                 {/* Header Banner */}
-                <div className="card" style={{ background: 'var(--bg-2)', border: '1px solid var(--cyan)' }}>
+                <div className="card" style={{ background: 'var(--bg-2)', border: '1px solid var(--cyan)', marginBottom: '1.25rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
                     <div>
                       <div style={{ fontSize: '.75rem', color: 'var(--text-3)', fontFamily: 'var(--mono)' }}>SIGNAL ID: {investigation.basic_info.signal_id}</div>
@@ -519,7 +621,7 @@ export const App: React.FC = () => {
                 </div>
 
                 {/* Grid Section */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.25rem' }}>
                   {/* Time Series & Trend Forecast */}
                   <div className="card">
                     <div className="card-title"><Ic n="trending" size={16} color="var(--cyan)"/> Time-Series Observation Trend & 3-Month Forecast</div>
@@ -588,26 +690,36 @@ export const App: React.FC = () => {
               Circles represent surveillance hotspots. Size = isolate count. Color = signal level. Hover for full details.<br/>
               <strong style={{ color:'var(--text-1)' }}>Resistance Velocity (df/dt)</strong> measures the rate of change of resistance signal frequency — not transmission speed.
             </p>
-            <WeatherMap pts={mapPts} showCoverage={false}/>
+            <WeatherMap pts={mapPts} showCoverage={false} onRetry={loadAllData}/>
           </div>
         )}
 
-        {/* 5. GENOMIC EXPLORER ─────────────────────────────── */}
+        {/* 5. PATTERN EXPLORER ─────────────────────────────── */}
         {tab==='clusters' && (
           <div className="card">
-            <div className="card-title"><Ic n="dna" size={16} color="var(--purple)"/> Genomic Cluster Explorer</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginTop: '1rem' }}>
-              {clusters.map(c => (
-                <div key={c.id} style={{ padding: '1rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
-                  <div style={{ fontWeight: 700, fontSize: '.9rem', color: 'var(--text-1)', fontStyle: 'italic' }}>{c.pathogen_name}</div>
-                  <div style={{ fontSize: '.78rem', color: 'var(--text-3)', marginTop: 2 }}>Gene: <span style={{ color: 'var(--cyan)' }}>{c.primary_gene}</span></div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', marginTop: '.75rem', color: 'var(--text-2)' }}>
-                    <span>Sequence Count: <strong>{c.sequence_count}</strong></span>
-                    <span>Novelty Score: <strong style={{ color: c.novelty_score>50?'var(--orange)':'var(--green)' }}>{c.novelty_score}/100</strong></span>
+            <div className="card-title"><Ic n="dna" size={16} color="var(--purple)"/> AMR Pattern Cluster Explorer</div>
+            <p style={{ color: 'var(--text-2)', fontSize: '.83rem', marginBottom: '1.25rem' }}>
+              Feature vector similarity clusters derived via IsolationForest anomaly scoring. <br/>
+              <em style={{ color: 'var(--text-3)' }}>Note: Feature similarity does NOT establish nucleotide-level genomic transmission links.</em>
+            </p>
+            {clusters.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginTop: '1rem' }}>
+                {clusters.map(c => (
+                  <div key={c.id} style={{ padding: '1rem', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                    <div style={{ fontWeight: 700, fontSize: '.9rem', color: 'var(--text-1)', fontStyle: 'italic' }}>{c.pathogen_name}</div>
+                    <div style={{ fontSize: '.78rem', color: 'var(--text-3)', marginTop: 2 }}>Gene: <span style={{ color: 'var(--cyan)' }}>{c.primary_gene}</span></div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', marginTop: '.75rem', color: 'var(--text-2)' }}>
+                      <span>Sequence Count: <strong>{c.sequence_count}</strong></span>
+                      <span>Novelty Score: <strong style={{ color: c.novelty_score>50?'var(--orange)':'var(--green)' }}>{c.novelty_score}/100</strong></span>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-3)', background: 'var(--bg-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                No pattern clusters available for the current surveillance query.
+              </div>
+            )}
           </div>
         )}
 
@@ -618,7 +730,7 @@ export const App: React.FC = () => {
             <p style={{ color:'var(--text-2)', fontSize:'.83rem', marginTop:0, marginBottom:'1.25rem' }}>
               Interactive multi-relational graph: <strong style={{ color:'var(--red)' }}>Pathogen</strong> → <strong style={{ color:'var(--cyan)' }}>Gene</strong> → <strong style={{ color:'var(--orange)' }}>Mechanism</strong> → <strong style={{ color:'var(--purple)' }}>Drug Class</strong> → <strong style={{ color:'var(--green)' }}>Region</strong>.
             </p>
-            <KnowledgeGraph data={graph}/>
+            <KnowledgeGraph data={graph} loading={loading} onRetry={loadAllData}/>
           </div>
         )}
 
@@ -702,7 +814,7 @@ export const App: React.FC = () => {
                 </div>
                 <div className="info-box info" style={{ marginTop: '1.25rem' }}>{dataQuality.explanation}</div>
               </>
-            ) : <div style={{ color: 'var(--text-3)' }}>Loading data quality audit…</div>}
+            ) : <div style={{ color: 'var(--text-3)', padding: '2rem', textAlign: 'center' }}>Loading data quality audit…</div>}
           </div>
         )}
 
@@ -739,7 +851,7 @@ export const App: React.FC = () => {
                 </div>
                 <div className="info-box warn" style={{ marginTop: '1.25rem' }}>{modelValidation.disclaimer}</div>
               </>
-            ) : <div style={{ color: 'var(--text-3)' }}>Loading validation metrics…</div>}
+            ) : <div style={{ color: 'var(--text-3)', padding: '2rem', textAlign: 'center' }}>Loading validation metrics…</div>}
           </div>
         )}
 
@@ -811,5 +923,10 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+function round(val: number, decimals: number): number {
+  const p = Math.pow(10, decimals);
+  return Math.round(val * p) / p;
+}
 
 export default App;

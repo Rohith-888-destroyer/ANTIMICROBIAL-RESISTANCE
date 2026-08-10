@@ -1,6 +1,6 @@
 # 🛡️ AMR-Sentinel V2 — Autonomous Global Antimicrobial Resistance Intelligence Network
 
-[![Vercel Deployment](https://img.shields.io/badge/Vercel-Deployed-success?logo=vercel)](https://antimicrobial-resistance-rcvs7tjl0-rohith-ashwa-vardhan.vercel.app)
+[![Vercel Deployment](https://img.shields.io/badge/Vercel-Deployed-success?logo=vercel)](https://github.com/Rohith-888-destroyer/AMR-Pattern-Novelty)
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-blue?logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-1.0-green?logo=fastapi)](https://fastapi.tiangolo.com)
 [![Vite + React](https://img.shields.io/badge/Frontend-Vite%20%2B%20React-cyan?logo=vite)](https://vitejs.dev)
@@ -33,54 +33,54 @@ graph TD
 
 ---
 
-## ✨ Key Features in V2
+## ⚡ Data Flow & Modes
 
-1. **Top-Level Data Status & Provenance**: Live Data Status header displaying dataset version, last update timestamp, total isolate record counts, and overall **Data Completeness Score (e.g. 84.5 / 100)**.
-2. **Ranked AMR Signal Radar**: Multi-factor ranking of priority signals categorised into *Critical*, *High*, *Moderate*, and *Low* priority for further scientific investigation.
-3. **Signal Investigation Page**: Detailed deep-dive view providing interactive time-series trend analysis, 3-month forecast projections with $95\%$ confidence bounds, Sentinel Score radial decomposition, and score contribution breakdowns.
-4. **Peer-Reviewed Literature Synthesis**: PubMed citation engine linking published papers (PMID, DOI, Journal, Year) to pathogen-gene combinations with alignment strength indicators.
-5. **Data Quality & Completeness Dashboard**: Audit matrix evaluating missing accessions, collection date resolution, CARD gene annotation depth, and regional sequencing throughput.
-6. **Empirical Model Validation Benchmark**: Benchmark metrics comparing Baseline rules vs IsolationForest vs Sentinel Score composite engine across Precision, Recall, F1-Score, and ROC-AUC.
-7. **Configurable Sentinel Score Weights**: Interactive UI modal allowing researchers to adjust parameters (Velocity %, Novelty %, Expansion %, Coverage %, Consistency %) to evaluate custom research hypotheses.
-8. **Research Reproducibility Tracking**: Automated assignment of unique **RUN IDs** (e.g., `AMR-2026-08-09-001`), software versions, and query parameters for full experimental reproducibility.
-9. **One-Click Report Export**: Downloadable signal research reports in formatted JSON and CSV payloads.
+### Data Flow Overview
+```
+DATA SOURCE (NCBI Pathogen Portal / CARD ARO)
+       ↓
+DATA INGESTION & ANNOTATION (ncbi_adapter.py & card_adapter.py)
+       ↓
+DATA CLEANING & NOVELTY DETECTION (novelty_detector.py)
+       ↓
+DATA STORAGE (amr_sentinel.db / SQLite)
+       ↓
+ML & SIGNAL ANALYSIS (velocity_engine.py & evidence_scorer.py)
+       ↓
+FASTAPI REST BACKEND (backend/app/main.py)
+       ↓
+SAME-ORIGIN VERCEL REWRITE / API CLIENT (dashboard/src/lib/api.ts)
+       ↓
+REACT/VITE DASHBOARD UI
+```
+
+### Data Modes
+The top header status bar dynamically displays the active dataset state:
+- 🟢 **LIVE DATA (`mode: live`)**: Successfully fetched and processed live metadata from NCBI Entrez E-utilities and Pathogen Isolate Browser.
+- 🟡 **CACHED DATA / STRUCTURED SEED DATASET (`mode: demo` / `mode: cached`)**: Pre-processed, scientifically representative seed dataset bundled with the repository (card.mcmaster.ca CARD ARO aligned).
+- 🔴 **DATA UNAVAILABLE (`mode: unavailable`)**: Displayed when backend data source cannot be reached, preserving scientific integrity without masking API errors as zero statistics.
 
 ---
 
-## 🧮 Sentinel Score Formulation
-
-The **Sentinel Score ($S$)** is a composite 0–100 computational metric synthesized from five observational dimensions:
-
-$$S = w_1 \cdot V + w_2 \cdot N + w_3 \cdot E + w_4 \cdot C + w_5 \cdot T$$
-
-Where default normalized weights are:
-- **Resistance Velocity ($V$, $w_1 = 30\%$)**: Temporal rate of change of gene frequency ($v = df / dt$).
-- **Genomic Novelty ($N$, $w_2 = 25\%$)**: Unsupervised IsolationForest anomaly score on pathogen-gene-country feature vectors.
-- **Geographic Expansion ($E$, $w_3 = 20\%$)**: Number of distinct country surveillance sites detecting the signal.
-- **Data Coverage & Quality ($C$, $w_4 = 15\%$)**: Isolate sample size and metadata completeness.
-- **Temporal Consistency ($T$, $w_5 = 10\%$)**: Multi-period observation consistency rate.
-
----
-
-## 🚀 Quick Start (Local Setup)
+## 💻 Local Development
 
 ### 1. Prerequisites
-- Python 3.12+
+- Python 3.10+
 - Node.js 18+
 
 ### 2. Backend Setup
 ```bash
 # Clone the repository
-git clone https://github.com/Rohith-888-destroyer/ANTIMICROBIAL-RESISTANCE.git
-cd ANTIMICROBIAL-RESISTANCE
+git clone https://github.com/Rohith-888-destroyer/AMR-Pattern-Novelty.git
+cd AMR-Pattern-Novelty
 
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Seed database and compute initial AMR signals
-python scripts/run_pipeline.py
+# Run database seed pipeline (populates data/amr_sentinel.db)
+python -m scripts.run_pipeline
 
-# Run FastAPI backend
+# Start FastAPI backend
 uvicorn backend.app.main:app --reload --port 8000
 ```
 - Interactive Swagger API Documentation: `http://localhost:8000/docs`
@@ -91,16 +91,24 @@ cd dashboard
 npm install
 npm run dev
 ```
-- Open `http://localhost:5173` in your browser.
+- Open `http://localhost:5173` in your browser. Development requests to `/api/*` are proxied directly to `http://127.0.0.1:8000`.
 
 ---
 
-## 🧪 Running Unit Tests
+## 🚀 Production Deployment (Vercel)
 
-```bash
-pytest
-```
-All unit tests verify API endpoints, data adapters, velocity engine, evidence scorer, literature synthesis, and model validation benchmarks.
+The application is configured for single-origin Vercel deployment:
+- **Build Command**: `cd dashboard && npm install && npm run build`
+- **Output Directory**: `dashboard/dist`
+- **Rewrites**:
+  - `/api/(.*)` → `/api/index.py` (FastAPI serverless handler)
+  - `/(.*)` → `/index.html` (Vite single page app)
+
+### Database Cold-Start Resilience
+Vercel serverless functions execute on ephemeral instances. To ensure immediate response times under 50ms without hitting rate limits or timeouts:
+1. `data/amr_sentinel.db` is bundled with the deployment.
+2. On serverless function initialization, `ensure_db_ready()` automatically copies `data/amr_sentinel.db` to `/tmp/amr_sentinel.db` if `/tmp` is uninitialized.
+3. The React frontend interacts with the API using same-origin relative endpoints (`/api/...`), using `import.meta.env.VITE_API_BASE_URL` if cross-origin host is explicitly set.
 
 ---
 
@@ -108,17 +116,36 @@ All unit tests verify API endpoints, data adapters, velocity engine, evidence sc
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/api/health` | `GET` | Health check & engine status |
-| `/api/data-status` | `GET` | Data provenance, run ID, and completeness score |
-| `/api/overview` | `GET` | Dashboard top-level intelligence metrics |
-| `/api/signals` | `GET` | Ranked emerging AMR signals |
-| `/api/signals/{id}/investigation` | `GET` | Signal deep-dive (time series, forecast, literature) |
-| `/api/search` | `POST` | Multi-criteria researcher search engine |
-| `/api/literature` | `GET` | Peer-reviewed PubMed citations |
-| `/api/data-quality` | `GET` | Data completeness and metadata audit |
-| `/api/model-validation` | `GET` | Benchmark evaluation metrics (Precision, Recall, F1, ROC-AUC) |
-| `/api/config/recalculate` | `POST` | Recalculate Sentinel Scores with custom weights |
-| `/api/export/report/{id}` | `GET` | Export downloadable research report (JSON/CSV) |
+| `/api/health` | `GET` | System status, dataset mode, pipeline readiness, record counts |
+| `/api/data-status` | `GET` | Data status badge info, dataset version, run ID, completeness score |
+| `/api/overview` | `GET` | Top-level dashboard metrics (observations, active signals, score, countries) |
+| `/api/signals` | `GET` | Ranked emerging AMR signals with velocity and Sentinel Score |
+| `/api/signals/{id}` | `GET` | Single signal details |
+| `/api/signals/{id}/investigation` | `GET` | Signal deep-dive (time series, 3-month forecast, score decomposition) |
+| `/api/map` | `GET` | Geographic surveillance hotspots, coordinates, velocity, signal levels |
+| `/api/coverage` | `GET` | Regional sequencing throughput and surveillance blind spots |
+| `/api/clusters` | `GET` | IsolationForest AMR pattern clusters with novelty scores |
+| `/api/knowledge-graph` | `GET` | Multi-relational graph (Pathogen → Gene → Mechanism → Drug Class → Region) |
+| `/api/timeline` | `GET` | Aggregated monthly isolate observation counts |
+| `/api/what-changed` | `GET` | Weekly intelligence briefing highlights |
+| `/api/data-quality` | `GET` | 8-dimension data completeness audit matrix |
+| `/api/model-validation` | `GET` | Benchmark evaluation metrics (Precision, Recall, F1, ROC-AUC, PR-AUC) |
+| `/api/literature` | `GET` | Peer-reviewed PubMed citations aligned to pathogen-gene pairs |
+| `/api/data-sources` | `GET` | Open data provenance and licensing details |
+| `/api/search` | `POST` | Multi-criteria search across observations, signals, and literature |
+| `/api/config/recalculate` | `POST` | Recalculate Sentinel Scores with custom research weights |
+| `/api/export/report/{id}` | `GET` | Downloadable research report JSON payload |
+
+---
+
+## 🔧 Troubleshooting
+
+### Problem: Dashboard displays "Data Unavailable" red banner
+- **Cause**: Backend API could not be reached or SQLite database failed to initialize.
+- **Fix**: Click **Retry Connection** or **Refresh** in the top bar. Ensure backend server is running (`uvicorn backend.app.main:app --port 8000`) locally, or verify Vercel serverless function logs.
+
+### Problem: Database missing locally
+- **Fix**: Run `python -m scripts.run_pipeline` to re-generate `data/amr_sentinel.db`.
 
 ---
 

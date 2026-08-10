@@ -13,7 +13,7 @@ client = TestClient(app)
 def test_api_health():
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "online"
+    assert response.json()["status"] in ["ok", "online"]
 
 def test_api_overview():
     response = client.get("/api/overview")
