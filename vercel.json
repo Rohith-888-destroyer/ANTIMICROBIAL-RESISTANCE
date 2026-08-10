@@ -1,6 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "cd dashboard && npm install && npm run build",
+  "installCommand": "pip install -r requirements.txt && cd dashboard && npm install",
+  "buildCommand": "cd dashboard && npm run build",
   "outputDirectory": "dashboard/dist",
   "rewrites": [
     {
